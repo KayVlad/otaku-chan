@@ -1,0 +1,107 @@
+<!--<div id="toolbar">
+  <a href="/" class="btn" x-target.push="toolbar breadcrumb main statusbar">⌂ Home</a>
+  <div style="flex:1"></div>
+</div>-->
+<div id="breadcrumb">
+  <a href="/" x-target.push="toolbar breadcrumb main statusbar">Home</a>
+  <span class="breadcrumb-sep">»</span>
+  <span class="crumb-current">Settings</span>
+  <span class="sb-right">
+    {% if user %}<a href="/logout" class="tb-link" title="Log out">&#9211;</a>{% endif %}
+  </span>
+</div>
+
+<div id="main" data-title="Settings — Manga Reader">
+  {% for m in get_flashed_messages() %}<div class="flash">{{ m }}</div>{% endfor %}
+
+  <div class="panel">
+    <div class="panel-head">Libraries <span class="panel-head-count">{{ libs | length }}</span></div>
+    {% for l in libs %}
+    <div class="srow">
+      <span class="srow-name">{{ l.name }}</span>
+      <code class="srow-path">{{ l.path }}</code>
+      {% if not l.exists %}<span class="warn" title="Path not found on disk">⚠</span>{% endif %}
+      {% if l.is_hidden %}<span class="tag" title="Hidden on home page">hidden</span>{% endif %}
+      <span style="flex:1"></span>
+      <span x-data="{ scanning: false, msg: '' }">
+        <span class="scan-msg" x-show="msg" x-text="msg"></span>
+        <button class="btn"
+                :disabled="scanning"
+                :class="scanning && 'btn-dim'"
+                @click="if (scanning) return;
+                  scanning = true; msg = 'Scanning…';
+                  fetch('/api/lib/{{ l.id }}/scan', { method: 'POST' })
+                    .then(() => { msg = 'Done'; setTimeout(() => { msg = ''; scanning = false; }, 2000); })
+                    .catch(() => { msg = 'Error'; setTimeout(() => { msg = ''; scanning = false; }, 3000); })">
+          Scan
+        </button>
+      </span>
+      <form method="post" action="/settings/library/{{ l.id }}/toggle-hidden">
+        <button class="btn" type="submit">{{ 'Show' if l.is_hidden else 'Hide' }}</button>
+      </form>
+      <form method="post" action="/settings/library/{{ l.id }}/delete"
+            onsubmit="return confirm('Remove {{ l.name }}? Progress will be deleted. Files on disk are untouched.')">
+        <button class="btn" type="submit">Remove</button>
+      </form>
+    </div>
+    {% endfor %}
+    {% if not libs %}<div class="srow" style="color:var(--text-dim)">No libraries yet</div>{% endif %}
+    <div class="srow">
+      <form method="post" action="/settings/library/add" class="form-row">
+        <div class="field"><label>Name</label><input class="input" name="name" placeholder="Main"></div>
+        <div class="field"><label>Path</label><input class="input" name="path" placeholder="/srv/manga" size="30"></div>
+        <button class="btn btn-accent" type="submit">Add</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">Users <span class="panel-head-count">{{ users | length }}</span></div>
+    {% for u in users %}
+    <div class="user-row">
+      <div class="user-row-head">
+        <span class="srow-name">{{ u.username }}</span>
+        {% if u.id == user['id'] %}<span class="tag tag-accent">you</span>{% endif %}
+        <span style="flex:1"></span>
+        {% if u.id != user['id'] %}
+        <form method="post" action="/settings/user/{{ u.id }}/delete"
+              onsubmit="return confirm('Delete {{ u.username }} and all their reading progress?')">
+          <button class="btn" type="submit">Delete</button>
+        </form>
+        {% endif %}
+      </div>
+      <form method="post" action="/settings/user/{{ u.id }}/update" class="user-row-form">
+        <div class="user-row-checks">
+          <label class="chk"><input type="checkbox" name="is_admin" {{ 'checked' if u.is_admin }}> admin</label>
+          {% for l in libs %}
+          <label class="chk"><input type="checkbox" name="libs" value="{{ l.id }}"
+            {{ 'checked' if l.id in access.get(u.id, []) }}> {{ l.name }}</label>
+          {% endfor %}
+        </div>
+        <div class="user-row-pass">
+          <input class="input" type="password" name="password" placeholder="new password"
+                 autocomplete="new-password" size="14">
+          <button class="btn" type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+    {% endfor %}
+    <div class="srow">
+      <form method="post" action="/settings/user/add" class="form-row">
+        <div class="field"><label>Username</label><input class="input" name="username" autocomplete="off"></div>
+        <div class="field"><label>Password</label><input class="input" type="password" name="password" autocomplete="new-password"></div>
+        <label class="chk"><input type="checkbox" name="is_admin"> admin</label>
+        <button class="btn btn-accent" type="submit">Add user</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="settings-note">
+    Admins see every library. Access checkboxes apply to non-admin users only.
+    Custom covers: drop a file at <code>&lt;manga&gt;/.cache/cover.jpg</code>
+  </div>
+</div>
+
+<div id="statusbar">
+  <span>Settings</span>
+</div>

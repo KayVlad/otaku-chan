@@ -1,0 +1,207 @@
+
+<div id="breadcrumb">
+  <a href="/" x-target.push="toolbar breadcrumb main statusbar">Home</a>
+  <span class="breadcrumb-sep">»</span>
+  <span class="crumb-current">{{ lib.name }}</span>
+  <span class="sb-right">
+    {% if user and user['is_admin'] %}<a href="/settings" class="tb-link" title="Settings">&#9881;</a>{% endif %}
+    {% if user %}<a href="/logout" class="tb-link" title="Log out">&#9211;</a>{% endif %}
+  </span>
+</div>
+<div id="main" data-title="{{ lib.name }} — Manga Reader">
+
+  <!-- Search panel -->
+  <div class="panel search-panel" x-data="{
+         query:   {{ text_q | tojson | forceescape }},
+         sortBy:  {{ sort   | tojson | forceescape }},
+         filters: {{ filters | tojson | forceescape }},
+         addFilter()    { this.filters.push({ type: 'tag', value: '', mode: 'include', op: '=' }) },
+         removeFilter(i){ this.filters.splice(i, 1) },
+         toggleMode(f)  { f.mode = f.mode === 'include' ? 'exclude' : 'include' },
+         clearFilters() { this.filters = [] },
+         search() {
+           const p = new URLSearchParams({ sort: this.sortBy });
+           if (this.query.trim()) p.set('q', this.query.trim());
+           const noVal = ['favorited', 'bookmarked', 'plan_to_read', 'dropped'];
+           const active = this.filters.filter(f => noVal.includes(f.type) || f.value.trim());
+           if (active.length) p.set('filters', JSON.stringify(active));
+           this.$refs.nav.href = '/l/{{ lib.id }}?' + p;
+           this.$refs.nav.click();
+         }
+       }">
+    <a x-ref="nav" href="#" x-target.push="toolbar breadcrumb main statusbar" style="display:none"></a>
+    <div class="search-ctrl-row">
+      <input type="text" class="input search-input" placeholder="Search titles…"
+             x-model="query" @keydown.enter="search()">
+      <button class="btn btn-accent" @click="search()">Search</button>
+      <div class="toolbar-sep"></div>
+      <span class="search-label">Order by</span>
+      <select class="input search-select" x-model="sortBy">
+        <option value="name">Name A → Z</option>
+        <option value="name_desc">Name Z → A</option>
+        <option value="volumes_desc">Most volumes</option>
+        <option value="volumes_asc">Fewest volumes</option>
+        <option value="date_asc">Release date ↑</option>
+        <option value="date_desc">Release date ↓</option>
+      </select>
+      <div class="toolbar-sep"></div>
+      <button class="btn" @click="addFilter()">+ Filter</button>
+    </div>
+    <div class="filter-bar" x-show="filters.length > 0" x-cloak>
+      <template x-for="(f, i) in filters" :key="i">
+        <div class="filter-row-item">
+
+          <select class="input filter-type-sel" x-model="f.type" @change="f.value = ''; f.op = '='">
+            <option value="tag">Tag</option>
+            <option value="status">Status</option>
+            <option value="plan_to_read">Plan to Read</option>
+            <option value="dropped">Dropped</option>
+            <option value="favorited">Favorited</option>
+            <option value="bookmarked">Bookmarked</option>
+            <option value="date">Release date</option>
+          </select>
+
+          <template x-if="f.type === 'tag'">
+            <div style="display:contents">
+              <input type="text" class="input filter-val-input" placeholder="tag name…" x-model="f.value">
+              <button class="btn filter-mode-btn" :class="f.mode === 'exclude' ? 'filter-mode-exclude' : 'btn-accent'" @click="toggleMode(f)">
+                <span x-text="f.mode === 'include' ? 'contains' : 'excludes'"></span>
+              </button>
+            </div>
+          </template>
+
+          <template x-if="f.type === 'status'">
+            <div style="display:contents">
+              <select class="input filter-val-input" x-model="f.value">
+                <option value="">— pick —</option>
+                <option value="reading">Reading</option>
+                <option value="completed">Completed</option>
+              </select>
+              <button class="btn filter-mode-btn" :class="f.mode === 'exclude' ? 'filter-mode-exclude' : 'btn-accent'" @click="toggleMode(f)">
+                <span x-text="f.mode === 'include' ? 'is' : 'is not'"></span>
+              </button>
+            </div>
+          </template>
+
+          <template x-if="['favorited','bookmarked','plan_to_read','dropped'].includes(f.type)">
+            <div style="display:contents">
+              <button class="btn filter-mode-btn" :class="f.mode === 'exclude' ? 'filter-mode-exclude' : 'btn-accent'" @click="toggleMode(f)">
+                <span x-text="f.mode === 'include' ? 'is' : 'is not'"></span>
+              </button>
+            </div>
+          </template>
+
+          <template x-if="f.type === 'date'">
+            <div style="display:contents">
+              <select class="input filter-op-sel" x-model="f.op">
+                <option value="=">=</option>
+                <option value=">">&gt;</option>
+                <option value="<">&lt;</option>
+              </select>
+              <input type="text" class="input filter-val-input" placeholder="e.g. 2020" x-model="f.value">
+            </div>
+          </template>
+
+          <button class="btn filter-rm-btn" @click="removeFilter(i)" title="Remove filter">×</button>
+        </div>
+      </template>
+      <div class="filter-bar-foot">
+        <button class="btn btn-quiet filter-clear-btn" @click="clearFilters()">Clear all</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results grid (always server-rendered) -->
+  <div class="panel">
+    <div class="panel-head">
+      {{ lib.name }}
+      {% if is_search %}
+      <span class="panel-head-count">{{ total }} result{{ 's' if total != 1 }}</span>
+      <a href="/l/{{ lib.id }}" class="btn btn-quiet" style="margin-left:6px;font-size:11px"
+         x-target.push="toolbar breadcrumb main statusbar">✕ Clear</a>
+      {% else %}
+      <span class="panel-head-count">{{ total }} titles{% if total_pages > 1 %} · page {{ page }}/{{ total_pages }}{% endif %}</span>
+      {% endif %}
+      {% if user.is_admin %}
+      <span class="ph-right" x-data="{ scanning: false, msg: '' }">
+        <span class="scan-msg" x-show="msg" x-text="msg"></span>
+        <a class="tb-link" x-ref="reload"
+           href="/l/{{ lib.id }}" x-target.push="toolbar breadcrumb main statusbar"
+           style="display:none"></a>
+        <a class="tb-link"
+           :style="scanning ? 'animation: spin 0.8s linear infinite; display:inline-block' : ''"
+           :class="scanning && 'btn-dim'"
+           @click.prevent="if (scanning) return;
+             scanning = true; msg = 'Scanning…';
+             fetch('/api/lib/{{ lib.id }}/scan', { method: 'POST' })
+               .then(() => { msg = 'Reloading…'; setTimeout(() => $refs.reload.click(), 2500); })
+               .catch(() => { scanning = false; msg = 'Error'; setTimeout(() => msg = '', 3000); })"
+           title="Scan library">↺</a>
+      </span>
+      {% endif %}
+    </div>
+    <div class="panel-body">
+      {% if manga_list %}
+      <div class="manga-grid">
+        {% for manga in manga_list %}
+        <a href="/m/{{ manga.id }}"
+           class="manga-card {{ 'has-progress' if manga.name in progress_set }}"
+           title="{{ manga.name }}" x-target.push="toolbar breadcrumb main statusbar">
+          <div class="manga-card-cover">
+            {% if manga.cover_path %}<img
+              src="/api/cover/{{ manga.id }}"
+              alt=""
+              onerror="this.onerror=null; this.src=getMangaPlaceholder({{ manga.id }})"
+              loading="lazy" decoding="async">
+            {% else %}<div class="manga-card-cover-placeholder">📖</div>{% endif %}
+            <div class="manga-card-status">
+              {% if manga.status == 'reading' or (not manga.status and manga.name in progress_set) %}<span class="mcs mcs-reading" title="Reading"></span>{% endif %}
+              {% if manga.status == 'completed'  %}<span class="mcs mcs-completed" title="Completed"></span>{% endif %}
+              {% if manga.plan_to_read           %}<span class="mcs mcs-plan" title="Plan to Read"></span>{% endif %}
+              {% if manga.dropped                %}<span class="mcs mcs-dropped" title="Dropped"></span>{% endif %}
+              {% if manga.favorited  %}<span class="mcs mcs-fav" title="Favourite">♥</span>{% endif %}
+              {% if manga.bookmarked %}<span class="mcs mcs-bookmarked" title="Bookmarked">🔖</span>{% endif %}
+            </div>
+            <span class="manga-card-badge">{{ manga.volume_count }}v</span>
+          </div>
+          <div class="manga-card-info"><div class="manga-card-title">{{ manga.name }}</div></div>
+        </a>
+        {% endfor %}
+      </div>
+      {% if not is_search and total_pages > 1 %}
+      <div class="pagination">
+        {% if page > 1 %}<a href="?page={{ page - 1 }}" class="btn page-btn" x-target.push="toolbar breadcrumb main statusbar">‹</a>
+        {% else %}<span class="btn page-btn btn-dim">‹</span>{% endif %}
+        {% for p in range(1, total_pages + 1) %}
+          {% if p == page %}<span class="btn page-btn page-btn-active">{{ p }}</span>
+          {% elif p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+            <a href="?page={{ p }}" class="btn page-btn" x-target.push="toolbar breadcrumb main statusbar">{{ p }}</a>
+          {% elif p == page - 3 or p == page + 3 %}<span style="color:var(--text-dim);padding:0 2px">…</span>{% endif %}
+        {% endfor %}
+        {% if page < total_pages %}<a href="?page={{ page + 1 }}" class="btn page-btn" x-target.push="toolbar breadcrumb main statusbar">›</a>
+        {% else %}<span class="btn page-btn btn-dim">›</span>{% endif %}
+        <span class="pagination-info">{{ page }} / {{ total_pages }}</span>
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-state-icon">{{ '🔍' if is_search else '📂' }}</div>
+        <div>{{ 'No results' if is_search else 'No manga in this library' }}</div>
+        {% if not is_search %}<div style="font-size:12px;color:var(--text-dim)"><code>{{ lib.path }}</code></div>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+<div id="statusbar">
+  <span>{{ lib.name }}</span>
+  <span style="color:var(--border-hi)">·</span>
+  {% if is_search %}
+  <span>{{ total }} result{{ 's' if total != 1 }}</span>
+  {% if text_q %}<span style="color:var(--border-hi)">·</span><span>«{{ text_q }}»</span>{% endif %}
+  {% else %}
+  <span>{{ total }} titles</span>
+  {% if total_pages > 1 %}<span style="color:var(--border-hi)">·</span><span>Page {{ page }}/{{ total_pages }}</span>{% endif %}
+  {% endif %}
+</div>

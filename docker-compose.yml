@@ -1,0 +1,12 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    env_file: .env
+    ports:
+      - "6769:${PORT:-5001}"
+    volumes:
+      - ./data:/data          
+      - ./manga_library:/mnt/manga:ro 
+    restart: unless-stopped

@@ -1,0 +1,25 @@
+<div id="toolbar"><div style="flex:1"></div></div>
+<div id="breadcrumb"><span class="crumb-current">First run</span></div>
+<div id="main" data-title="Setup — Manga Reader">
+  <div class="auth-wrap">
+    <div class="panel">
+      <div class="panel-head">First run — create admin</div>
+      <div class="panel-body">
+        {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
+        <form method="post" action="/setup">
+          <div class="field"><label for="su-user">Username</label>
+            <input class="input" id="su-user" name="username" autofocus autocomplete="username"></div>
+          <div class="field"><label for="su-pass">Password <span style="color:var(--text-dim)">(min 4 chars)</span></label>
+            <input class="input" id="su-pass" type="password" name="password" autocomplete="new-password"></div>
+          <div class="auth-divider">First library <span style="color:var(--text-dim)">(optional)</span></div>
+          <div class="field"><label for="su-lname">Library name</label>
+            <input class="input" id="su-lname" name="lib_name" placeholder="Main"></div>
+          <div class="field"><label for="su-lpath">Library path</label>
+            <input class="input" id="su-lpath" name="lib_path" placeholder="/srv/manga" value="{{ env_root }}"></div>
+          <button class="btn btn-accent" type="submit">Create &amp; sign in</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="statusbar"><span>Manga Reader — setup</span></div>

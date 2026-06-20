@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manga Reader</title>
+  <style>html{background:#0d1020}</style>
+  <script src="/static/scripts/manga-placeholder.js"></script>
+  <script>
+  function reader(images, nextVolumeName, prevVolumeName, libId, mangaEncoded, mangaName, volumeName, resumePage, mangaId) {
+    return {
+      images, nextVolumeName, prevVolumeName, libId, mangaEncoded, mangaName, volumeName, mangaId,
+      currentIdx: 0, rtl: false, viewMode: 'fit', showStrip: false,
+      zoom: 1, panX: 0, panY: 0, dragging: false,
+      transitioning: false, activeSlot: 0,
+      slots: [{ src: '', cls: '' }, { src: '', cls: '' }],
+      _drag: null, _wheelAt: 0, _pf: null, _pfNextVol: false,
+
+      get progress() {
+        return this.images.length <= 1 ? 100 : (this.currentIdx / (this.images.length - 1)) * 100;
+      },
+      get nextVolumeUrl() {
+        return this.nextVolumeName
+          ? `/m/${this.mangaId}/${encodeURIComponent(this.nextVolumeName)}`
+          : null;
+      },
+      get prevVolumeUrl() {
+        return this.prevVolumeName
+          ? `/m/${this.mangaId}/${encodeURIComponent(this.prevVolumeName)}`
+          : null;
+      },
+      get cameraStyle() {
+        return this.viewMode === 'zoom'
+          ? `transform: translate(${this.panX}px, ${this.panY}px) scale(${this.zoom})` : '';
+      },
+
+      init() {
+        this.rtl = localStorage.getItem('manga-rtl') === '1';
+        let start = 0;
+        const entry = sessionStorage.getItem('mr-entry');
+        sessionStorage.removeItem('mr-entry');
+        if (entry === 'end') { start = this.images.length - 1; }
+        else if (entry !== 'start') {
+          if (resumePage > 0 && resumePage < this.images.length) start = resumePage;
+        }
+        this.currentIdx = start;
+        this.slots[0] = { src: this.images[start] || '', cls: 'page-active' };
+        this.slots[1] = { src: '', cls: '' };
+        this.saveProgress(); this.prefetchNext();
+        window.__mangaReader = this; window.__mangaReaderEl = this.$root;
+        this.$nextTick(() => this.scrollStrip(start));
+      },
+
+      destroy() {
+        if (window.__mangaReader === this) { window.__mangaReader = null; window.__mangaReaderEl = null; }
+      },
+
+      saveProgress() {
+        fetch('/api/progress', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ library_id: this.libId, manga: this.mangaName,
+            volume: this.volumeName, page: this.currentIdx, total: this.images.length }),
+        }).catch(() => {});
+      },
+
+      toggleRtl() { this.rtl = !this.rtl; localStorage.setItem('manga-rtl', this.rtl ? '1' : '0'); },
+      setMode(m) { this.viewMode = m; if (m === 'fit') this.resetZoom(); },
+      zoomBy(f) {
+        let newZoom = Math.min(8, Math.max(0.2, this.zoom * f));
+        if ((this.zoom - 1) * (newZoom - 1) < 0) newZoom = 1;
+        if (f < 1) this._recenterPan(newZoom);
+        this.zoom = newZoom;
+      },
+      zoomByAt(f, mx, my, cx, cy) {
+        let newZoom = Math.min(8, Math.max(0.2, this.zoom * f));
+        if ((this.zoom - 1) * (newZoom - 1) < 0) newZoom = 1;
+        const r = newZoom / this.zoom;
+        if (f >= 1) {
+          const ox = mx - cx, oy = my - cy;
+          this.panX = ox + (this.panX - ox) * r;
+          this.panY = oy + (this.panY - oy) * r;
+        } else {
+          this._recenterPan(newZoom);
+        }
+        this.zoom = newZoom;
+      },
+      _recenterPan(newZoom) {
+        if (newZoom <= 1) { this.panX = 0; this.panY = 0; return; }
+        const t = (newZoom - 1) / (this.zoom - 1);
+        this.panX *= t; this.panY *= t;
+      },
+      resetZoom() { this.zoom = 1; this.panX = 0; this.panY = 0; },
+
+      scrollStrip(idx) {
+        this.$refs.strip?.querySelectorAll('.strip-thumb')?.[idx]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      },
+
+      async goTo(idx, dir = null) {
+        if (idx < 0 || idx >= this.images.length) return;
+        if (idx === this.currentIdx || this.transitioning) return;
+        if (dir === null) dir = idx > this.currentIdx ? 'forward' : 'backward';
+        const incoming = 1 - this.activeSlot;
+        const exitLeft = (dir === 'forward') !== this.rtl;
+        const exitCls = exitLeft ? 'page-exit-left' : 'page-exit-right';
+        const stagedCls = exitLeft ? 'page-staged-right' : 'page-staged-left';
+        this.transitioning = true;
+        this.slots[incoming].src = this.images[idx];
+        this.slots[incoming].cls = stagedCls;
+        await this.$nextTick();
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          this.slots[this.activeSlot].cls = exitCls;
+          this.slots[incoming].cls = 'page-active';
+          setTimeout(() => {
+            const outgoing = this.activeSlot;
+            this.activeSlot = incoming; this.currentIdx = idx;
+            this.slots[outgoing].src = ''; this.slots[outgoing].cls = '';
+            this.transitioning = false;
+            this.saveProgress(); this.prefetchNext();
+            this.$nextTick(() => this.scrollStrip(idx));
+          }, 175);
+        }));
+      },
+
+      _navToVolume(url, entry) {
+        sessionStorage.setItem('mr-entry', entry);
+        const link = document.querySelector(`#toolbar a[href="${url}"]`);
+        if (link) link.click(); else window.location.href = url;
+      },
+
+      next() {
+        if (this.currentIdx < this.images.length - 1) { this.goTo(this.currentIdx + 1, 'forward'); }
+        else if (this.nextVolumeUrl) { this._navToVolume(this.nextVolumeUrl, 'start'); }
+      },
+      prev() {
+        if (this.currentIdx > 0) { this.goTo(this.currentIdx - 1, 'backward'); }
+        else if (this.prevVolumeUrl) { this._navToVolume(this.prevVolumeUrl, 'end'); }
+      },
+
+      startDrag(e) {
+        if (this.viewMode !== 'zoom') return;
+        this.dragging = true;
+        this._drag = { x: e.clientX, y: e.clientY, px: this.panX, py: this.panY };
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+      },
+      moveDrag(e) {
+        if (!this.dragging || !this._drag) return;
+        this.panX = this._drag.px + (e.clientX - this._drag.x);
+        this.panY = this._drag.py + (e.clientY - this._drag.y);
+      },
+      endDrag() { this.dragging = false; this._drag = null; },
+
+      onStageClick() { if (this.viewMode === 'fit') this.next(); },
+      onDblClick() { if (this.viewMode === 'zoom') this.resetZoom(); },
+      onWheel(e) {
+        if (this.viewMode === 'zoom') {
+          const rect = e.currentTarget.getBoundingClientRect();
+          this.zoomByAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY,
+                        rect.left + rect.width / 2, rect.top + rect.height / 2);
+        } else {
+          const now = Date.now();
+          if (now - this._wheelAt < 160) return;
+          this._wheelAt = now;
+          e.deltaY > 0 ? this.next() : this.prev();
+        }
+      },
+
+      onKey(e) {
+        if (e.target.tagName === 'INPUT') return;
+        const fwd = () => this.next(), bwd = () => this.prev();
+        const map = {
+          ArrowRight: this.rtl ? bwd : fwd, ArrowLeft: this.rtl ? fwd : bwd,
+          ArrowDown: fwd, ArrowUp: bwd, ' ': fwd,
+          Home: () => this.goTo(0, 'backward'),
+          End: () => this.goTo(this.images.length - 1, 'forward'),
+          '+': () => this.zoomBy(1.2), '=': () => this.zoomBy(1.2),
+          '-': () => this.zoomBy(1 / 1.2), '0': () => this.resetZoom(),
+          'f': () => { if (this.viewMode === 'zoom') { this.resetZoom() } },
+          'm': () => this.setMode(this.viewMode === 'fit' ? 'zoom' : 'fit'),
+          Escape: () => document.querySelector('#toolbar a[data-back]')?.click(),
+        };
+        if (map[e.key]) { e.preventDefault(); map[e.key](); }
+      },
+
+      seekTo(event) {
+        const rect = event.currentTarget.getBoundingClientRect();
+        const idx = Math.max(0, Math.min(
+          Math.round((event.clientX - rect.left) / rect.width * (this.images.length - 1)),
+          this.images.length - 1));
+        this.goTo(idx, idx > this.currentIdx ? 'forward' : 'backward');
+      },
+
+      prefetchNext() {
+        if (this.currentIdx + 1 < this.images.length) {
+          this._pf = new Image(); this._pf.src = this.images[this.currentIdx + 1];
+          this._pfNextVol = false; return;
+        }
+        if (this.nextVolumeName && !this._pfNextVol) {
+          this._pfNextVol = true;
+          fetch(`/api/m/${this.mangaId}/${encodeURIComponent(this.nextVolumeName)}/images`)
+            .then(r => r.json())
+            .then(imgs => { if (imgs?.[0]) { this._pf = new Image(); this._pf.src = imgs[0]; } })
+            .catch(() => {});
+        }
+      },
+    };
+  }
+
+  (() => {
+    let prev = {}, raf = null;
+    function loop() {
+      const r = window.__mangaReader, alive = r && window.__mangaReaderEl?.isConnected;
+      for (const gp of (navigator.getGamepads?.() || [])) {
+        if (!gp) continue;
+        const last = prev[gp.index] || [];
+        const edge = i => !!gp.buttons[i]?.pressed && !last[i];
+        if (alive) {
+          if (edge(0) || edge(5)) r.next();
+          if (edge(1) || edge(4)) r.prev();
+          if (edge(15)) (r.rtl ? r.prev() : r.next());
+          if (edge(14)) (r.rtl ? r.next() : r.prev());
+          if (edge(13)) r.next(); if (edge(12)) r.prev();
+          if (edge(7) && r.nextVolumeUrl) r._navToVolume(r.nextVolumeUrl, 'start');
+          if (edge(6) && r.prevVolumeUrl) r._navToVolume(r.prevVolumeUrl, 'end');
+          if (edge(9)) r.setMode(r.viewMode === 'fit' ? 'zoom' : 'fit');
+          if (edge(8)) r.toggleRtl();
+          if (edge(3) && r.viewMode === 'zoom') r.zoomBy(1.2);
+          if (edge(2) && r.viewMode === 'zoom') r.zoomBy(1 / 1.2);
+          if (r.viewMode === 'zoom') {
+            const dz = 0.18, speed = 14;
+            const a = i => Math.abs(gp.axes[i] || 0) > dz ? gp.axes[i] : 0;
+            const ax = a(0) + a(2), ay = a(1) + a(3);
+            if (ax || ay) { r.panX -= ax * speed; r.panY -= ay * speed; }
+          }
+        }
+        prev[gp.index] = gp.buttons.map(b => b.pressed);
+      }
+      raf = requestAnimationFrame(loop);
+    }
+    window.addEventListener('gamepadconnected', () => { if (!raf) loop(); });
+    window.addEventListener('gamepaddisconnected', () => {
+      if (![...(navigator.getGamepads?.() || [])].some(Boolean) && raf) {
+        cancelAnimationFrame(raf); raf = null; prev = {};
+      }
+    });
+  })();
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@imacrayon/alpine-ajax@0.12.7/dist/cdn.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.14.1/dist/cdn.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="shell">
+  {{ fragment | safe }}
+</div>
+<script>
+  function syncMain(main, isSwap) {
+    if (!main) return;
+    if (main.dataset.title) {
+      document.title = main.dataset.title;
+    }
+    main.classList.toggle('no-pad', !!main.dataset.reader);
+    document.body.classList.toggle('in-reader', !!main.dataset.reader);
+    if (isSwap) main.scrollTop = 0;
+    const cur = main.querySelector('.acc-current');
+    if (cur) cur.scrollIntoView({ block: 'center' });
+  }
+  document.addEventListener('ajax:merged', (e) => { if (e.target.id === 'main') syncMain(e.target, true); });
+  syncMain(document.getElementById('main'), false);
+</script>
+<img src="/static/images/mascot.png" class="mascot" alt="">
+</body>
+</html>

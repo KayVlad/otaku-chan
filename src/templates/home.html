@@ -1,0 +1,95 @@
+<!--<div id="toolbar">
+  <div style="flex:1"></div>
+</div>
+
+-->
+<div id="breadcrumb">
+  <span class="crumb-current">Home</span>
+  <span class="sb-right">
+    {% if user['is_admin'] %}<a href="/settings" class="tb-link" title="Settings">&#9881;</a>{% endif %}
+    <a href="/logout" class="tb-link" title="Log out">&#9211;</a>
+  </span>
+</div>
+<div id="main" data-title="Manga Reader">
+  {% if cont %}
+  <div class="panel">
+    <div class="panel-head">Continue Reading</div>
+    <div class="panel-body">
+      <div class="card-row">
+        {% for c in cont %}
+        <a href="/m/{{ c.manga_id }}/{{ c.volume | urlencode }}"
+          class="manga-card" title="{{ c.manga }} — {{ c.volume }}" x-target.push="toolbar breadcrumb main statusbar">
+          <div class="manga-card-cover">
+            <img
+              src="/api/cover/{{ c.manga_id }}"
+              alt=""
+              onerror="this.onerror=null; this.src=getMangaPlaceholder({{ c.manga_id }})"
+              loading="lazy"
+              decoding="async">
+            <div class="cc-bar"><i style="width:{{ (100 * (c.page + 1) / c.total) | round(1) }}%"></i></div>
+          </div>
+          <div class="manga-card-info">
+            <div class="manga-card-title">{{ c.manga }}</div>
+            <div class="manga-card-meta">{{ c.volume }} · p.{{ c.page + 1 }}/{{ c.total }}</div>
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if lib_rows %}
+  <div class="panel">
+    <a id="lib-hidden-toggle"
+       href="{{ '/' if show_hidden else '/?show_hidden=1' }}"
+       x-target.push="toolbar breadcrumb main statusbar"
+       style="display:none"></a>
+    <div class="panel-head {{ 'panel-head--active' if show_hidden }}"
+         ondblclick="document.getElementById('lib-hidden-toggle').click()"
+         title="Double-click to {{ 'show only visible' if show_hidden else 'show hidden' }} libraries">
+      Libraries{% if show_hidden %} <span class="panel-head-tag">all</span>{% endif %}
+    </div>
+    <div class="panel-body">
+      <div class="manga-grid">
+        {% for row in lib_rows %}
+        <a href="/l/{{ row.lib.id }}" class="manga-card lib-card" x-target.push="toolbar breadcrumb main statusbar">
+          <div class="lib-card-cover">
+            <img src="/api/lib/{{ row.lib.id }}/cover" alt=""
+              onerror="this.onerror=null; this.src=getMangaPlaceholder({{ row.lib.id + 1001 }})"
+              loading="lazy"
+              decoding="async">
+            {% if not row.lib.exists %}<span class="manga-card-badge">⚠</span>{% endif %}
+            <div class="lib-card-overlay">
+              <div class="lib-card-title">{{ row.lib.name }}</div>
+              <div class="lib-card-meta">{{ row.total }} title{{ 's' if row.total != 1 }}</div>
+            </div>
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="panel">
+    <div class="panel-head">Welcome</div>
+    <div class="panel-body">
+      <div class="empty-state">
+        <div class="empty-state-icon">📚</div>
+        {% if user['is_admin'] %}
+        <div style="color:var(--text)">No libraries yet</div>
+        <div>Add one in <a href="/settings">Settings</a></div>
+        {% else %}
+        <div style="color:var(--text)">No libraries assigned to your account</div>
+        <div>Ask an admin to grant you access</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+<div id="statusbar">
+  <span>{{ user['username'] }}</span>
+  <span style="color:var(--border-hi)">·</span>
+  <span>{{ libs | length }} {{ 'library' if libs|length == 1 else 'libraries' }}</span>
+</div>

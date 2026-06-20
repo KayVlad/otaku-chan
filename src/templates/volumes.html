@@ -1,0 +1,227 @@
+ <!-- <div id="toolbar">
+  {% if last_volume %}
+  <a href="/m/{{ manga["id"] }}/{{ last_volume | urlencode }}"
+     class="btn btn-accent" title="{{ last_volume }}"
+     x-target.push="toolbar breadcrumb main statusbar">▶ Continue</a>
+  {% else %}{% if volumes %}
+  <a href="/m/{{ manga["id"] }}/{{ volumes[0].name | urlencode }}"
+     class="btn btn-accent"
+     x-target.push="toolbar breadcrumb main statusbar">▶ Read First</a>
+  {% endif %}{% endif %}
+{% if volumes %}
+  <div class="toolbar-sep"></div>
+  <a href="/m/{{ manga["id"] }}/{{ volumes[-1].name | urlencode }}"
+     class="btn btn-quiet"
+     x-target.push="toolbar breadcrumb main statusbar">Read Last</a>
+  {% endif %}
+  <div style="flex:1"></div>
+  <span class="tag">{{ volumes | length }} volumes</span>
+</div>
+-->
+<div id="breadcrumb">
+  <a href="/" x-target.push="toolbar breadcrumb main statusbar">Home</a>
+  <span class="breadcrumb-sep">»</span>
+  <a href="/l/{{ lib.id }}" x-target.push="toolbar breadcrumb main statusbar">{{ lib.name }}</a>
+  <span class="breadcrumb-sep">»</span>
+  <span class="crumb-current">{{ manga["name"] }}</span>
+  <span class="sb-right">
+    {% if user and user['is_admin'] %}<a href="/settings" class="tb-link" title="Settings">&#9881;</a>{% endif %}
+    {% if user %}<a href="/logout" class="tb-link" title="Log out">&#9211;</a>{% endif %}
+  </span>
+</div>
+
+<div id="main" data-title="{{ manga["name"] }} — Manga Reader">
+  {% if volumes %}
+
+  <div class="vol-top"
+       x-data="{
+         editing:     false,
+         saving:      false,
+         desc:        {{ (manga['description'] or '') | tojson | forceescape }},
+         date:        {{ (manga['release_date'] or '') | tojson | forceescape }},
+         tags:        {{ tags_csv | tojson | forceescape }},
+         planToRead:  {{ 1 if user_manga.get('plan_to_read') else 0 }},
+         dropped:     {{ 1 if user_manga.get('dropped') else 0 }},
+         favorited:   {{ 1 if user_manga.get('favorited') else 0 }},
+         bookmarked:  {{ 1 if user_manga.get('bookmarked') else 0 }},
+         async save() {
+           this.saving = true;
+           await fetch('/api/m/{{ manga["id"] }}/meta', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ description: this.desc, release_date: this.date, tags: this.tags })
+           });
+           this.saving = false;
+           this.editing = false;
+         },
+         async toggleFlag(f) {
+           this[f] = this[f] ? 0 : 1;
+           await this.saveUser();
+         },
+         async saveUser() {
+           await fetch('/api/m/{{ manga["id"] }}/user', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ plan_to_read: !!this.planToRead, dropped: !!this.dropped,
+                                    favorited: !!this.favorited, bookmarked: !!this.bookmarked })
+           });
+         }
+       }">
+
+    <div class="vol-cover-col">
+      {% if cover %}
+      <img class="vol-cover-img" src="{{ cover }}" alt="{{ manga['name'] }}"
+           onerror="this.onerror=null; this.src=getMangaPlaceholder({{ manga['id'] }})"
+           decoding="async">
+      {% else %}
+      <div class="vol-cover-placeholder">📖</div>
+      {% endif %}
+    </div>
+
+    <div class="vol-meta-col">
+
+      <!-- display mode -->
+      <div class="vol-meta-view" x-show="!editing">
+        <div class="vol-meta-title">{{ manga["name"] }}</div>
+        <div class="vol-meta-date" x-show="date" x-text="date"></div>
+        <div class="vol-meta-desc" x-show="desc" x-text="desc"></div>
+        <div class="vol-meta-dim" x-show="!desc">No description.</div>
+        <div class="vol-meta-tags" x-show="tags">
+          <template x-for="tag in (tags||'').split(',').map(t=>t.trim()).filter(t=>t)" :key="tag">
+            <span class="tag" x-text="tag"></span>
+          </template>
+        </div>
+        <div class="vol-meta-status">
+          {% if user_manga.get('status') == 'reading' %}
+          <span class="status-btn status-active status-reading" style="cursor:default" title="Auto-set when reading starts">Reading</span>
+          {% endif %}
+          {% if user_manga.get('status') == 'completed' %}
+          <span class="status-btn status-active status-completed" style="cursor:default" title="Auto-set when all volumes read">Completed</span>
+          {% endif %}
+          <button @click="toggleFlag('planToRead')" class="status-btn" :class="planToRead && 'status-active status-plan'">Plan to Read</button>
+          <button @click="toggleFlag('dropped')"    class="status-btn" :class="dropped    && 'status-active status-dropped'">Dropped</button>
+          <button @click="toggleFlag('favorited')"  class="status-btn status-flag" :class="favorited  && 'status-active status-fav'"      title="Favourite">♥</button>
+          <button @click="toggleFlag('bookmarked')" class="status-btn status-flag" :class="bookmarked && 'status-active status-bookmark'" title="Bookmark">🔖</button>
+        </div>
+        <div class="vol-meta-actions">
+          {% if last_volume %}
+          <a href="/m/{{ manga['id'] }}/{{ last_volume | urlencode }}"
+             class="btn btn-accent"
+             x-target.push="toolbar breadcrumb main statusbar">▶ Continue</a>
+          {% elif volumes %}
+          <a href="/m/{{ manga['id'] }}/{{ volumes[0].name | urlencode }}"
+             class="btn btn-accent"
+             x-target.push="toolbar breadcrumb main statusbar">▶ Read First</a>
+          {% endif %}
+          {% if user and user['is_admin'] %}
+          <button class="btn" @click="editing = true">✏ Edit</button>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- edit mode -->
+      <div class="vol-meta-form" x-show="editing" x-cloak>
+        <div class="field">
+          <label>Release date</label>
+          <input type="text" class="input" x-model="date" placeholder="e.g. 2021">
+        </div>
+        <div class="field">
+          <label>Description</label>
+          <textarea class="input vol-meta-textarea" x-model="desc" rows="5" placeholder="Description…"></textarea>
+        </div>
+        <div class="field">
+          <label>Tags <span style="color:var(--text-dim);font-weight:normal">(comma-separated)</span></label>
+          <input type="text" class="input" x-model="tags" placeholder="action, romance, fantasy…">
+        </div>
+        <div class="vol-meta-actions">
+          <button class="btn btn-accent" @click="save()" :disabled="saving" x-text="saving ? 'Saving…' : 'Save'"></button>
+          <button class="btn" @click="editing = false">Cancel</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- volumes list -->
+  <div class="panel" x-data="{
+    prog: {{ prog | tojson | forceescape }},
+    vols: {{ volumes | map(attribute='name') | list | tojson | forceescape }},
+    isRead(v) { return !!(this.prog[v] && this.prog[v].read); },
+    readCount() { return this.vols.filter(v => this.isRead(v)).length; },
+    allRead() { return this.vols.length > 0 && this.vols.every(v => this.isRead(v)); },
+    async toggleVol(v) {
+      const nowRead = !this.isRead(v);
+      if (!this.prog[v]) this.prog[v] = {};
+      this.prog[v].read = nowRead ? 1 : 0;
+      await fetch('/api/m/{{ manga['id'] }}/volume/' + encodeURIComponent(v) + '/read', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({read: nowRead})
+      });
+    },
+    async markAll(read) {
+      this.vols.forEach(v => { if (!this.prog[v]) this.prog[v] = {}; this.prog[v].read = read ? 1 : 0; });
+      await fetch('/api/m/{{ manga['id'] }}/read-all', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({read: read})
+      });
+    }
+  }">
+    <div class="panel-head">
+      Volumes
+      <span class="panel-head-count" x-text="readCount() + ' / {{ volumes | length }} read'"></span>
+      <span style="flex:1"></span>
+      <button class="btn btn-quiet vol-mark-all-btn"
+              @click="markAll(!allRead())"
+              x-text="allRead() ? 'Unread all' : 'Read all'"></button>
+    </div>
+    <div class="vol-list">
+      {% for vol in volumes %}
+      <a href="/m/{{ manga["id"] }}/{{ vol['name'] }}"
+         class="vol-row{% if vol.name == last_volume %} vol-row-current{% endif %}"
+         :class="isRead(vols[{{ loop.index0 }}]) && 'vol-row-read'"
+         x-target.push="toolbar breadcrumb main statusbar">
+        <span class="vol-row-name">{{ vol.name }}</span>
+        <span class="vol-row-progress">
+          <span x-show="isRead(vols[{{ loop.index0 }}])">✓</span>
+          <span x-show="!isRead(vols[{{ loop.index0 }}]) && !!prog[vols[{{ loop.index0 }}]]"
+                x-text="prog[vols[{{ loop.index0 }}]] ? 'p.' + (prog[vols[{{ loop.index0 }}]].page + 1) + '/' + prog[vols[{{ loop.index0 }}]].total : ''"></span>
+        </span>
+        <span class="vol-row-count">{{ vol.image_count }}p</span>
+        <button class="vol-row-mark"
+                @click.stop="toggleVol(vols[{{ loop.index0 }}])"
+                :title="isRead(vols[{{ loop.index0 }}]) ? 'Mark unread' : 'Mark read'">
+          <span x-text="isRead(vols[{{ loop.index0 }}]) ? '✓' : '○'"></span>
+        </button>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% else %}
+  <div class="panel">
+    <div class="panel-head">{{ manga["name"] }}</div>
+    <div class="panel-body">
+      <div class="empty-state">
+        <div class="empty-state-icon">📂</div>
+        <div>No volumes found</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<div id="statusbar">
+  <span>{{ manga["name"] }}</span>
+  {% if read_count %}
+  <span style="color:var(--border-hi)">·</span>
+  <span>{{ read_count }}/{{ volumes | length }} read</span>
+  {% endif %}
+  {% if user_manga.get('status') %}
+  <span style="color:var(--border-hi)">·</span>
+  <span>{{ user_manga['status'] | capitalize }}</span>
+  {% endif %}
+  {% if user_manga.get('plan_to_read') %}<span style="color:var(--border-hi)">·</span><span>Plan to Read</span>{% endif %}
+  {% if user_manga.get('dropped') %}<span style="color:var(--border-hi)">·</span><span>Dropped</span>{% endif %}
+  {% if user_manga.get('favorited') %}<span style="color:#ff6b8a;margin-left:4px">♥</span>{% endif %}
+  {% if user_manga.get('bookmarked') %}<span style="margin-left:2px">🔖</span>{% endif %}
+</div>

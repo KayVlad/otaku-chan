@@ -1,0 +1,85 @@
+<!--<div id="toolbar">
+  <a href="/m/{{ manga_id }}" class="btn btn-quiet" data-back
+     x-target.push="toolbar breadcrumb main statusbar">← Volumes</a>
+  <div class="toolbar-sep"></div>
+  {% if prev_volume %}
+  <a href="/m/{{ manga_id }}/{{ prev_volume | urlencode }}"
+     class="btn" x-target.push="toolbar breadcrumb main statusbar">‹ Prev</a>
+  {% else %}<span class="btn btn-dim">‹ Prev</span>{% endif %}
+  {% if next_volume %}
+  <a href="/m/{{ manga_id }}/{{ next_volume | urlencode }}"
+     class="btn btn-accent" x-target.push="toolbar breadcrumb main statusbar">Next ›</a>
+  {% else %}<span class="btn btn-dim">Next ›</span>{% endif %}
+  <div style="flex:1"></div>
+  <span class="tag tag-accent">Vol. {{ volume_index }}/{{ total_volumes }}</span>
+</div>
+-->
+<div id="breadcrumb">
+  <a href="/" x-target.push="toolbar breadcrumb main statusbar">Home</a>
+  <span class="breadcrumb-sep">»</span>
+  <a href="/l/{{ lib.id }}" x-target.push="toolbar breadcrumb main statusbar">{{ lib.name }}</a>
+  <span class="breadcrumb-sep">»</span>
+  <a href="/m/{{ manga_id }}"
+     x-target.push="toolbar breadcrumb main statusbar">{{ manga_name }}</a>
+  <span class="breadcrumb-sep">»</span>
+  <span class="crumb-current">{{ volume_name }}</span>
+</div>
+<div id="main" data-title="{{ volume_name }} — {{ manga_name }}" data-reader="1">
+  <div
+    x-data='reader({{ images | tojson }}, {{ next_volume | tojson }}, {{ prev_volume | tojson }}, {{ lib.id }}, {{ manga_name | urlencode | tojson }}, {{ manga_name | tojson }}, {{ volume_name | tojson }}, {{ resume_page }}, {{ manga_id }})'
+    x-init="init()" @keydown.window="onKey($event)"
+    style="height:100%;display:flex;flex-direction:column">
+    <div class="reader-shell">
+      <div class="strip-sidebar" x-ref="strip" x-show="showStrip">
+        <template x-for="(img, i) in images" :key="i">
+          <div class="strip-thumb" :class="{ active: currentIdx === i }" @click="goTo(i)">
+            <img :src="img" :alt="'Page '+(i+1)" loading="lazy">
+            <div class="strip-thumb-num" x-text="i+1"></div>
+          </div>
+        </template>
+      </div>
+      <div class="viewer-main">
+        <div class="page-stage"
+             :class="{ 'zoom-mode': viewMode === 'zoom', dragging: dragging }"
+             @pointerdown="startDrag($event)" @pointermove="moveDrag($event)"
+             @pointerup="endDrag()" @pointercancel="endDrag()"
+             @click="onStageClick()" @dblclick="onDblClick()" @wheel.prevent="onWheel($event)">
+          <div class="page-camera" :class="{ dragging: dragging }" :style="cameraStyle">
+            <template x-for="(slot, i) in slots" :key="i">
+              <div class="page-slot" :class="slot.cls" x-show="slot.cls">
+                <img :src="slot.src" draggable="false" alt="">
+              </div>
+            </template>
+          </div>
+          <div class="viewer-nav-overlay" x-show="viewMode === 'fit'">
+            <div class="viewer-zone" @click.stop="rtl ? next() : prev()"></div>
+            <div class="viewer-zone-center"></div>
+            <div class="viewer-zone" @click.stop="rtl ? prev() : next()"></div>
+          </div>
+        </div>
+        <div class="viewer-bar">
+          <button class="btn" :class="{active: showStrip}" @click="showStrip = !showStrip" title="Toggle page strip">☰</button>
+          <span class="tag zoom-pct"
+                x-text="Math.round(zoom*100)+'%'" @click="resetZoom()"
+                title="Click to reset zoom"></span>
+          <div class="mode-toggle">
+            <button class="btn" :class="{active: viewMode === 'fit'}" @click="setMode('fit')" title="Fit height">↕</button>
+            <button class="btn" :class="{active: viewMode === 'zoom'}" @click="setMode('zoom')" title="Zoom &amp; drag">⊕</button>
+            <button class="btn" :class="{active: rtl}" @click="toggleRtl()" title="Weeb mode">❀</button>
+          </div>
+          <div class="progress-track">
+            <template x-for="(img, i) in images" :key="i">
+              <div class="progress-seg" :class="{ active: i <= currentIdx }" @click.stop="goTo(i)"></div>
+            </template>
+          </div>
+          <button class="btn" @click="prev()" style="padding:2px 8px">‹</button>
+          <span class="page-indicator" x-text="(currentIdx+1)+' / '+images.length"></span>
+          <button class="btn" @click="next()" style="padding:2px 8px">›</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="statusbar">
+  <span>{{ volume_name }} — {{ manga_name }}</span>
+</div>

@@ -1,0 +1,20 @@
+<!--div id="toolbar"><div style="flex:1"></div></div>-->
+<div id="breadcrumb"><span class="crumb-current">Sign in</span></div>
+<div id="main" data-title="Sign in — Manga Reader">
+  <div class="auth-wrap">
+    <div class="panel">
+      <div class="panel-head">Sign in</div>
+      <div class="panel-body">
+        {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
+        <form method="post" action="/login">
+          <div class="field"><label for="li-user">Username</label>
+            <input class="input" id="li-user" name="username" autofocus autocomplete="username"></div>
+          <div class="field"><label for="li-pass">Password</label>
+            <input class="input" id="li-pass" type="password" name="password" autocomplete="current-password"></div>
+          <button class="btn btn-accent" type="submit">Sign in</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="statusbar"><span>Manga Reader</span></div>

@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Database & runtime data
+data/
+manga_library/
+src/__pycache__/
+
+# Environment / local config
+.env
