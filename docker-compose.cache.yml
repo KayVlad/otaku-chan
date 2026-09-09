@@ -1,0 +1,7 @@
+# Optional SSD cache: docker compose -f docker-compose.yml -f docker-compose.cache.yml up -d --build
+services:
+  app:
+    environment:
+      CONTENT_CACHE_DIR: /cache
+    volumes:
+      - ${MANGA_CACHE_HOST_PATH:?Set MANGA_CACHE_HOST_PATH to your SSD directory}:/cache

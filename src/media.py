@@ -1,5 +1,6 @@
 from pathlib import Path
-from flask import Blueprint, abort, send_file
+from flask import Blueprint, abort, send_file, request
+from content_cache import content_cache
 from config import CACHE_DIR, COVER_NAMES, IMAGE_EXTENSIONS
 from helpers import safe_path
 from libraries import first_image, lib_or_404, manga_or_404
@@ -11,8 +12,18 @@ media_bp = Blueprint("media", __name__)
 def serve_image(manga_id, volume_name, filename):
     manga = manga_or_404(manga_id)
     manga_path = Path(manga['path'])
+    if Path(filename).suffix.lower() not in IMAGE_EXTENSIONS:
+        abort(404)
+    if request.args.get('source') != '1':
+        cached = content_cache().lookup(manga)
+        if cached:
+            cached_file = safe_path(cached, volume_name, filename)
+            try:
+                return send_file(cached_file)
+            except OSError:
+                pass  # Expired/missing cached pages always fall back to the source.
     path = safe_path(manga_path, volume_name, filename)
-    if not path.is_file() or path.suffix.lower() not in IMAGE_EXTENSIONS:
+    if not path.is_file():
         abort(404)
     return send_file(path)
 

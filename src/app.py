@@ -1,7 +1,8 @@
 import secrets
 from datetime import timedelta
 from flask import Flask
-from config import DATA_DIR, DEBUG, PORT, SECRET_PATH
+from config import DATA_DIR, DEBUG, PORT, SECRET_PATH, CONTENT_CACHE_DIR
+from content_cache import init_cache
 from db import close_db, init_db
 from auth import auth_bp
 from views import views_bp
@@ -30,6 +31,7 @@ app.cli.command("make-sample")(make_sample)
 app.cli.command("seed-meta")(seed_meta)
 
 init_db()
+init_cache(app, CONTENT_CACHE_DIR)
 
 if __name__ == "__main__":
     app.run(debug=DEBUG, port=PORT)

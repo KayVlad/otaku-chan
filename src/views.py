@@ -1,4 +1,5 @@
 from pathlib import Path
+from content_cache import content_cache, reading_path
 from flask import Blueprint, abort, g, jsonify, redirect, request, url_for
 from config import MANGA_PER_PAGE
 from db import ex, q, q1
@@ -145,9 +146,11 @@ def reader(manga_id, volume_name):
     manga = manga_or_404(manga_id)
     lib = {"id": manga["lib_id"], "name": manga["lib_name"]}
     manga_path = Path(manga['path'])
-    images = get_images(manga['id'], manga_path, volume_name)
+    read_path, source_only = reading_path(manga, volume_name)
+    images = get_images(manga['id'], read_path, volume_name, source_only=source_only)
     if not images:
         abort(404)
+    content_cache().ensure(manga)
     all_volumes = [d.name for d in visible_dirs(manga_path)]
     idx = all_volumes.index(volume_name) if volume_name in all_volumes else 0
     row = q1("""SELECT page FROM progress
@@ -223,7 +226,8 @@ def api_scan_lib(lib_id):
 @views_bp.route("/api/m/<int:manga_id>/<volume_name>/images")
 def api_images(manga_id, volume_name):
     manga = manga_or_404(manga_id)
-    return jsonify(get_images(manga['id'], Path(manga['path']), volume_name))
+    read_path, source_only = reading_path(manga, volume_name)
+    return jsonify(get_images(manga['id'], read_path, volume_name, source_only=source_only))
 
 
 @views_bp.route("/api/m/<int:manga_id>/volume/<path:volume_name>/read", methods=["POST"])

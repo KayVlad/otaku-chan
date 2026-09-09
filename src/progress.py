@@ -3,7 +3,7 @@ from pathlib import Path
 from flask import Blueprint, abort, g, jsonify, request
 from config import CONTINUE_LIMIT
 from db import ex, q, q1
-from libraries import lib_or_404
+from libraries import lib_or_404, visible_dirs
 
 progress_bp = Blueprint("progress", __name__)
 
@@ -27,6 +27,7 @@ def save_progress(lib_id, manga, volume, page, total):
                 status = CASE WHEN user_manga.status IS NULL THEN 'reading' ELSE user_manga.status END,
                 updated_at = excluded.updated_at""",
              (g.user["id"], manga_row["id"], now))
+        sync_completion(manga_row["id"], lib_id, manga)
 
 
 def manga_progress(lib_id, manga):
@@ -48,15 +49,17 @@ def set_volume_read(lib_id, manga, volume, read):
 
 def sync_completion(manga_id, lib_id, manga_name):
     """Auto-set 'completed' when all volumes are read; revert to 'reading' when not."""
-    manga_row = q1("SELECT volume_count FROM manga WHERE id=?", (manga_id,))
-    if not manga_row or manga_row["volume_count"] == 0:
+    manga_row = q1("SELECT path FROM manga WHERE id=?", (manga_id,))
+    if not manga_row:
         return
-    total = manga_row["volume_count"]
-    read_count = q1("""SELECT COUNT(*) c FROM progress
-                       WHERE user_id=? AND library_id=? AND manga=? AND read=1""",
-                    (g.user["id"], lib_id, manga_name))["c"]
+    current = {d.name for d in visible_dirs(Path(manga_row["path"]))}
+    if not current:
+        return
+    read = {r["volume"] for r in q(
+        "SELECT volume FROM progress WHERE user_id=? AND library_id=? AND manga=? AND read=1",
+        (g.user["id"], lib_id, manga_name))}
     now = int(time.time() * 1000)
-    if read_count >= total:
+    if current <= read:
         ex("""INSERT INTO user_manga (user_id, manga_id, status, updated_at)
               VALUES (?,?,'completed',?)
               ON CONFLICT(user_id, manga_id) DO UPDATE SET

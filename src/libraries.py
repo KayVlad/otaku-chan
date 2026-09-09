@@ -1,5 +1,5 @@
 from pathlib import Path
-from flask import g, abort
+from flask import g, abort, url_for
 from config import IMAGE_EXTENSIONS, CACHE_DIR, COVER_NAMES, MANGA_PER_PAGE
 from db import q, q1, ex
 from helpers import natural_sort_key, safe_iterdir, safe_path
@@ -39,6 +39,15 @@ def scan_lib(lib_id: int):
                 cover_path   = excluded.cover_path,
                 scanned_at   = excluded.scanned_at""",
            (lib_id, name, str(manga_path), volume_count, cover_path, now))
+        manga_id = q1("SELECT id FROM manga WHERE lib_id=? AND name=?", (lib_id, name))["id"]
+        current = {chapter.name for chapter in chapters}
+        for user in q("SELECT user_id FROM user_manga WHERE manga_id=? AND status='completed'", (manga_id,)):
+            read = {r["volume"] for r in q(
+                "SELECT volume FROM progress WHERE user_id=? AND library_id=? AND manga=? AND read=1",
+                (user["user_id"], lib_id, name))}
+            if current - read:
+                ex("UPDATE user_manga SET status='reading', updated_at=? WHERE user_id=? AND manga_id=?",
+                   (now, user["user_id"], manga_id))
    
 def visible_dirs(path: Path):
     return sorted(
@@ -99,11 +108,12 @@ def get_volumes(path: Path):
     return volumes
 
 
-def get_images(manga_id: int, manga_path: Path, volume_name: str):
+def get_images(manga_id: int, manga_path: Path, volume_name: str, source_only=False):
     volume_path = safe_path(manga_path, volume_name)
     if not volume_path.is_dir():
         abort(404)
-    return [f"/img/{manga_id}/{volume_name}/{f.name}"
+    return [url_for("media.serve_image", manga_id=manga_id, volume_name=volume_name,
+                    filename=f.name, **({"source": "1"} if source_only else {}))
             for f in volume_images(volume_path)]
 
 

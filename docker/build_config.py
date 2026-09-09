@@ -14,6 +14,7 @@ DEFAULTS = {
     "home_row_size":  10,
     "continue_limit": 12,
     "cache_dir":      ".cache",
+    "content_cache_dir": "",
 }
 
 # env var name -> (json key, cast function)
@@ -24,6 +25,7 @@ ENV_MAP = {
     "HOME_ROW_SIZE":  ("home_row_size",  int),
     "CONTINUE_LIMIT": ("continue_limit", int),
     "CACHE_DIR":      ("cache_dir",      str),
+    "CONTENT_CACHE_DIR": ("content_cache_dir", str),
 }
 
 

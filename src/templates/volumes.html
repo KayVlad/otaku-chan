@@ -176,7 +176,7 @@
     </div>
     <div class="vol-list">
       {% for vol in volumes %}
-      <a href="/m/{{ manga["id"] }}/{{ vol['name'] }}"
+      <a href="{{ url_for('views.reader', manga_id=manga['id'], volume_name=vol['name']) }}"
          class="vol-row{% if vol.name == last_volume %} vol-row-current{% endif %}"
          :class="isRead(vols[{{ loop.index0 }}]) && 'vol-row-read'"
          x-target.push="toolbar breadcrumb main statusbar">
