@@ -1,13 +1,15 @@
 import re
+import unicodedata
 from pathlib import Path
 from flask import abort, request, Response, render_template as _render_template
 
 
-_LEADING_ARTICLES = re.compile(r"^(the|a|an)\s+", re.IGNORECASE)
-
 def natural_sort_key(s: str):
-    s = _LEADING_ARTICLES.sub("", s)
-    return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s)]
+    """Compare numbered file/folder names naturally, with stable tie-breaking."""
+    normalized = unicodedata.normalize("NFKC", s).casefold()
+    parts = tuple(int(t) if t.isdecimal() else t for t in re.split(r"(\d+)", normalized))
+    return parts, normalized, s
+
 
 
 def safe_iterdir(path: Path):

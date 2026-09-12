@@ -37,6 +37,7 @@
        x-data="{
          editing:     false,
          saving:      false,
+         author:      {{ (manga['author'] or '') | tojson | forceescape }},
          desc:        {{ (manga['description'] or '') | tojson | forceescape }},
          date:        {{ (manga['release_date'] or '') | tojson | forceescape }},
          tags:        {{ tags_csv | tojson | forceescape }},
@@ -49,7 +50,7 @@
            await fetch('/api/m/{{ manga["id"] }}/meta', {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ description: this.desc, release_date: this.date, tags: this.tags })
+             body: JSON.stringify({ author: this.author, description: this.desc, release_date: this.date, tags: this.tags })
            });
            this.saving = false;
            this.editing = false;
@@ -83,6 +84,7 @@
       <!-- display mode -->
       <div class="vol-meta-view" x-show="!editing">
         <div class="vol-meta-title">{{ manga["name"] }}</div>
+        <div class="vol-meta-date" x-show="author">By <span x-text="author"></span></div>
         <div class="vol-meta-date" x-show="date" x-text="date"></div>
         <div class="vol-meta-desc" x-show="desc" x-text="desc"></div>
         <div class="vol-meta-dim" x-show="!desc">No description.</div>
@@ -121,6 +123,10 @@
 
       <!-- edit mode -->
       <div class="vol-meta-form" x-show="editing" x-cloak>
+        <div class="field">
+          <label for="manga-author">Author</label>
+          <input id="manga-author" type="text" class="input" x-model="author" placeholder="Author name…">
+        </div>
         <div class="field">
           <label>Release date</label>
           <input type="text" class="input" x-model="date" placeholder="e.g. 2021">

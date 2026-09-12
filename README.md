@@ -49,3 +49,10 @@ Caching is shared across users; all normal library access checks still apply.
 ```sh
 python -m unittest discover -s tests -v
 ```
+
+Reader gestures: pinch with two fingers to zoom, then drag with one finger to pan.
+Zoom mode also provides +/− buttons. The page slider supports drag/tap and keyboard
+arrows, Home and End, regardless of the number of pages.
+Run the JavaScript reader regressions with `node --test tests/reader.test.cjs` (Node 18+).
+
+Search supports title text plus combined include/exclude filters for tags, author, description, reading status (including Unread / not started), and personal flags. Author and description match case-insensitive literal substrings, including Unicode. Release-date filters accept a year or YYYY-MM-DD; a year compares whole years. Results stay paginated with filters preserved. Administrators can edit author metadata on the manga detail page; existing databases add the optional author field automatically at startup.

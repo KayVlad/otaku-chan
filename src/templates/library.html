@@ -16,9 +16,9 @@
          sortBy:  {{ sort   | tojson | forceescape }},
          filters: {{ filters | tojson | forceescape }},
          addFilter()    { this.filters.push({ type: 'tag', value: '', mode: 'include', op: '=' }) },
-         removeFilter(i){ this.filters.splice(i, 1) },
+         removeFilter(i){ this.filters.splice(i, 1); this.search() },
          toggleMode(f)  { f.mode = f.mode === 'include' ? 'exclude' : 'include' },
-         clearFilters() { this.filters = [] },
+         clearFilters() { this.filters = []; this.search() },
          search() {
            const p = new URLSearchParams({ sort: this.sortBy });
            if (this.query.trim()) p.set('q', this.query.trim());
@@ -47,12 +47,17 @@
       <div class="toolbar-sep"></div>
       <button class="btn" @click="addFilter()">+ Filter</button>
     </div>
+    <datalist id="library-tags">
+      {% for tag in tag_suggestions %}<option value="{{ tag.name }}"></option>{% endfor %}
+    </datalist>
     <div class="filter-bar" x-show="filters.length > 0" x-cloak>
       <template x-for="(f, i) in filters" :key="i">
         <div class="filter-row-item">
 
           <select class="input filter-type-sel" x-model="f.type" @change="f.value = ''; f.op = '='">
             <option value="tag">Tag</option>
+            <option value="author">Author</option>
+            <option value="description">Description</option>
             <option value="status">Status</option>
             <option value="plan_to_read">Plan to Read</option>
             <option value="dropped">Dropped</option>
@@ -63,7 +68,17 @@
 
           <template x-if="f.type === 'tag'">
             <div style="display:contents">
-              <input type="text" class="input filter-val-input" placeholder="tag name…" x-model="f.value">
+              <input type="text" class="input filter-val-input" placeholder="tag name…" list="library-tags" x-model="f.value" @keydown.enter="search()" aria-label="Tag name">
+              <button class="btn filter-mode-btn" :class="f.mode === 'exclude' ? 'filter-mode-exclude' : 'btn-accent'" @click="toggleMode(f)">
+                <span x-text="f.mode === 'include' ? 'contains' : 'excludes'"></span>
+              </button>
+            </div>
+          </template>
+
+          <template x-if="['author', 'description'].includes(f.type)">
+            <div style="display:contents">
+              <input type="text" class="input filter-val-input" :aria-label="f.type === 'author' ? 'Author search' : 'Description search'"
+                     :placeholder="f.type === 'author' ? 'Author name…' : 'Description contains…'" x-model="f.value" @keydown.enter="search()">
               <button class="btn filter-mode-btn" :class="f.mode === 'exclude' ? 'filter-mode-exclude' : 'btn-accent'" @click="toggleMode(f)">
                 <span x-text="f.mode === 'include' ? 'contains' : 'excludes'"></span>
               </button>
@@ -74,6 +89,7 @@
             <div style="display:contents">
               <select class="input filter-val-input" x-model="f.value">
                 <option value="">— pick —</option>
+                <option value="unread">Unread / not started</option>
                 <option value="reading">Reading</option>
                 <option value="completed">Completed</option>
               </select>
@@ -98,7 +114,7 @@
                 <option value=">">&gt;</option>
                 <option value="<">&lt;</option>
               </select>
-              <input type="text" class="input filter-val-input" placeholder="e.g. 2020" x-model="f.value">
+              <input type="text" class="input filter-val-input" placeholder="YYYY or YYYY-MM-DD" title="Enter a year or full date. A year matches the whole year." x-model="f.value" @keydown.enter="search()">
             </div>
           </template>
 
@@ -168,17 +184,17 @@
         </a>
         {% endfor %}
       </div>
-      {% if not is_search and total_pages > 1 %}
+      {% if total_pages > 1 %}
       <div class="pagination">
-        {% if page > 1 %}<a href="?page={{ page - 1 }}" class="btn page-btn" x-target.push="toolbar breadcrumb main statusbar">‹</a>
+        {% if page > 1 %}<a href="{{ page_url(page - 1) }}" class="btn page-btn" x-target.push="toolbar breadcrumb main statusbar">‹</a>
         {% else %}<span class="btn page-btn btn-dim">‹</span>{% endif %}
         {% for p in range(1, total_pages + 1) %}
           {% if p == page %}<span class="btn page-btn page-btn-active">{{ p }}</span>
           {% elif p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
-            <a href="?page={{ p }}" class="btn page-btn" x-target.push="toolbar breadcrumb main statusbar">{{ p }}</a>
+            <a href="{{ page_url(p) }}" class="btn page-btn" x-target.push="toolbar breadcrumb main statusbar">{{ p }}</a>
           {% elif p == page - 3 or p == page + 3 %}<span style="color:var(--text-dim);padding:0 2px">…</span>{% endif %}
         {% endfor %}
-        {% if page < total_pages %}<a href="?page={{ page + 1 }}" class="btn page-btn" x-target.push="toolbar breadcrumb main statusbar">›</a>
+        {% if page < total_pages %}<a href="{{ page_url(page + 1) }}" class="btn page-btn" x-target.push="toolbar breadcrumb main statusbar">›</a>
         {% else %}<span class="btn page-btn btn-dim">›</span>{% endif %}
         <span class="pagination-info">{{ page }} / {{ total_pages }}</span>
       </div>

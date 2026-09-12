@@ -1683,59 +1683,59 @@ input[type="checkbox"] {
 }
 
 .progress-track {
-
-  flex: 1;
-
-  height: 6px;
-
-  display: flex;
-
-  justify-content: space-around;
-
+  flex: 1 1 80px;
+  width: 0;
+  min-width: 0;
+  height: 28px;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
   cursor: pointer;
-  min-width: 40px;
-
 }
-
-.progress-seg {
-
-  flex: 1;
-  height: 100%;
-
+.progress-track::-webkit-slider-runnable-track {
+  height: 8px;
+  border: 1px solid var(--border-hi);
+  border-radius: 0;
+  background: linear-gradient(to right, var(--btn-accent-face) 0 var(--page-progress, 0%), var(--bg4) var(--page-progress, 0%) 100%);
+}
+.progress-track::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1px;
+  height: 28px;
+  margin-top: -11px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.progress-track::-moz-range-track {
+  height: 6px;
+  border: 1px solid var(--border-hi);
+  border-radius: 0;
   background: var(--bg4);
-
-  border-right: 1px solid var(--bg2);
-
-  position: relative;
-  overflow: hidden;
-
 }
-
-.progress-seg:last-child {
-  border-right: none;
+.progress-track::-moz-range-progress {
+  height: 6px;
+  border-radius: 0;
+  background: var(--btn-accent-face);
 }
-
-.progress-seg::after {
-
-  content: '';
-  position: absolute;
-  inset: 0;
-
-  background: var(--accent);
-  opacity: 0.85;
-
-  transform: scaleX(0);
-  transform-origin: left;
-
-  transition: transform 0.15s ease-out;
-
+.progress-track::-moz-range-thumb {
+  width: 1px;
+  height: 28px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
-
-.progress-seg.active::after {
-  transform: scaleX(1);
-}
-
-
+.progress-track:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.progress-track:disabled { opacity: 0.5; cursor: default; }
+.zoom-buttons { display: flex; gap: 4px; }
+.viewer-bar > .btn, .viewer-bar .page-indicator { flex-shrink: 0; }
 
 .mode-toggle {
   display: flex;
@@ -2113,3 +2113,17 @@ input[type="checkbox"] {
 
 }
 
+
+/* Keep the page slider independent of page count and reachable on small screens. */
+@media (max-width: 640px), (pointer: coarse) {
+  .viewer-bar { flex-wrap: wrap; }
+  .viewer-bar .btn { min-width: 36px; min-height: 40px; }
+  .viewer-bar .progress-track { order: 10; flex: 1 0 100%; width: 100%; height: 32px; }
+  .viewer-bar .zoom-pct { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+}
+@media (max-width: 640px) {
+  .reader-shell { flex-direction: column; }
+  .strip-sidebar { position: static; flex: 0 0 88px; width: 100%; order: 1; }
+}
+
+.reader-pagination { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }

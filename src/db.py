@@ -1,4 +1,5 @@
 import sqlite3
+import unicodedata
 from flask import g
 from config import DB_PATH
 
@@ -48,6 +49,7 @@ def init_db():
             path         TEXT NOT NULL,
             cover_path   TEXT,
             cache_path   TEXT,
+            author       TEXT,
             description  TEXT,
             release_date TEXT,
             UNIQUE(lib_id, name)
@@ -73,6 +75,10 @@ def init_db():
             PRIMARY KEY (user_id, manga_id)
         );
     """)
+    # Upgrade existing libraries without rebuilding their metadata or progress.
+    columns = {row[1] for row in con.execute("PRAGMA table_info(manga)")}
+    if "author" not in columns:
+        con.execute("ALTER TABLE manga ADD COLUMN author TEXT")
     con.commit()
     con.close()
 
@@ -81,6 +87,9 @@ def db():
     if "db" not in g:
         g.db = sqlite3.connect(DB_PATH)
         g.db.row_factory = sqlite3.Row
+        g.db.create_function("search_text", 1,
+                             lambda value: unicodedata.normalize("NFKC", value or "").casefold(),
+                             deterministic=True)
         g.db.execute("PRAGMA foreign_keys=ON")
     return g.db
 

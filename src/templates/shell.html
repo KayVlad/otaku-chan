@@ -14,7 +14,7 @@
       zoom: 1, panX: 0, panY: 0, dragging: false,
       transitioning: false, activeSlot: 0,
       slots: [{ src: '', cls: '' }, { src: '', cls: '' }],
-      _drag: null, _wheelAt: 0, _pf: null, _pfNextVol: false,
+      _pointers: {}, _gesture: null, _suppressClick: false, _gestureTravel: 0, _pendingPage: null, _wheelAt: 0, _pf: null, _pfNextVol: false,
 
       get progress() {
         return this.images.length <= 1 ? 100 : (this.currentIdx / (this.images.length - 1)) * 100;
@@ -64,7 +64,7 @@
       },
 
       toggleRtl() { this.rtl = !this.rtl; localStorage.setItem('manga-rtl', this.rtl ? '1' : '0'); },
-      setMode(m) { this.viewMode = m; if (m === 'fit') this.resetZoom(); },
+      setMode(m) { this.viewMode = m; this._pointers = {}; this._gesture = null; this.dragging = false; if (m === 'fit') this.resetZoom(); },
       zoomBy(f) {
         let newZoom = Math.min(8, Math.max(0.2, this.zoom * f));
         if ((this.zoom - 1) * (newZoom - 1) < 0) newZoom = 1;
@@ -97,7 +97,8 @@
 
       async goTo(idx, dir = null) {
         if (idx < 0 || idx >= this.images.length) return;
-        if (idx === this.currentIdx || this.transitioning) return;
+        if (this.transitioning) { this._pendingPage = idx; return; }
+        if (idx === this.currentIdx) return;
         if (dir === null) dir = idx > this.currentIdx ? 'forward' : 'backward';
         const incoming = 1 - this.activeSlot;
         const exitLeft = (dir === 'forward') !== this.rtl;
@@ -117,6 +118,8 @@
             this.transitioning = false;
             this.saveProgress(); this.prefetchNext();
             this.$nextTick(() => this.scrollStrip(idx));
+            const pending = this._pendingPage; this._pendingPage = null;
+            if (pending !== null) this.goTo(pending);
           }, 175);
         }));
       },
@@ -136,20 +139,54 @@
         else if (this.prevVolumeUrl) { this._navToVolume(this.prevVolumeUrl, 'end'); }
       },
 
+      gestureState() {
+        const points = Object.values(this._pointers).slice(0, 2);
+        if (!points.length) return null;
+        const a = points[0], b = points[1] || a;
+        return { x: (a.x+b.x)/2, y: (a.y+b.y)/2,
+          distance: Math.hypot(b.x-a.x, b.y-a.y), count: points.length };
+      },
       startDrag(e) {
-        if (this.viewMode !== 'zoom') return;
-        this.dragging = true;
-        this._drag = { x: e.clientX, y: e.clientY, px: this.panX, py: this.panY };
-        e.currentTarget.setPointerCapture?.(e.pointerId);
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        if (!Object.keys(this._pointers).length) { this._suppressClick = false; this._gestureTravel = 0; }
+        this._pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+        if (Object.keys(this._pointers).length >= 2) {
+          this.viewMode = 'zoom';
+          this._suppressClick = true;
+        }
+        this.dragging = this.viewMode === 'zoom';
+        this._gesture = this.gestureState();
+        if (this.dragging) Object.keys(this._pointers).forEach(id => e.currentTarget.setPointerCapture?.(Number(id)));
       },
       moveDrag(e) {
-        if (!this.dragging || !this._drag) return;
-        this.panX = this._drag.px + (e.clientX - this._drag.x);
-        this.panY = this._drag.py + (e.clientY - this._drag.y);
+        if (!this._pointers[e.pointerId]) return;
+        const previous = this._gesture;
+        this._pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+        const next = this.gestureState();
+        if (!previous || !next) return;
+        this._gestureTravel += Math.hypot(next.x-previous.x, next.y-previous.y);
+        if (this._gestureTravel > 6) this._suppressClick = true;
+        if (this.viewMode === 'zoom') {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
+          const factor = next.count === 2 && previous.distance > 0 ? next.distance/previous.distance : 1;
+          const zoom = Math.min(8, Math.max(0.2, this.zoom * factor));
+          const ratio = zoom / this.zoom;
+          this.panX = next.x-cx - (previous.x-cx-this.panX)*ratio;
+          this.panY = next.y-cy - (previous.y-cy-this.panY)*ratio;
+          this.zoom = zoom;
+        }
+        this._gesture = next;
       },
-      endDrag() { this.dragging = false; this._drag = null; },
-
-      onStageClick() { if (this.viewMode === 'fit') this.next(); },
+      endDrag(e) {
+        delete this._pointers[e.pointerId];
+        this._gesture = this.gestureState();
+        this.dragging = this.viewMode === 'zoom' && !!this._gesture;
+      },
+      onStageClick(direction = 'next') {
+        if (this._suppressClick || this.viewMode !== 'fit') return;
+        direction === 'next' ? this.next() : this.prev();
+      },
       onDblClick() { if (this.viewMode === 'zoom') this.resetZoom(); },
       onWheel(e) {
         if (this.viewMode === 'zoom') {

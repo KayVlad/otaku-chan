@@ -33,90 +33,125 @@ _SORT_MAP = {
 }
 
 
-def _search_manga(lib_id, text_q, sort, filters):
-    order = _SORT_MAP.get(sort, _SORT_MAP["name"])
-    where_clauses = ["m.lib_id=?"]
-    where_params  = [lib_id]
-
-    if text_q:
-        where_clauses.append("m.name LIKE ? COLLATE NOCASE")
-        where_params.append(f"%{text_q}%")
-
-    for f in filters:
-        ftype = str(f.get("type", "tag"))
-        fval  = str(f.get("value", "")).strip()
-        fmode = str(f.get("mode", "include"))
-        fop   = str(f.get("op", "="))
-        if not fval and ftype not in ("favorited", "bookmarked"):
+def _clean_filters(raw):
+    from datetime import date
+    if not isinstance(raw, list):
+        return []
+    result = []
+    flags = ("favorited", "bookmarked", "plan_to_read", "dropped")
+    for item in raw:
+        if not isinstance(item, dict):
             continue
-        if ftype == "tag":
-            sub = ("SELECT manga_id FROM manga_tags mt "
-                   "JOIN tags t ON t.id=mt.tag_id WHERE t.name=? COLLATE NOCASE")
-            where_clauses.append(f"m.id {'IN' if fmode == 'include' else 'NOT IN'} ({sub})")
-            where_params.append(fval)
-        elif ftype == "status":
-            if fval not in ("reading", "completed"):
+        kind = item.get("type", "tag")
+        value = item.get("value", "")
+        mode = item.get("mode", "include")
+        op = item.get("op", "=")
+        if not isinstance(value, str) or mode not in ("include", "exclude"):
+            continue
+        value = value.strip()
+        if kind in flags:
+            value = ""
+        elif kind in ("tag", "author", "description"):
+            if not value:
                 continue
-            if fmode == "include":
-                where_clauses.append("um.status = ?")
-            else:
-                where_clauses.append("(um.status IS NULL OR um.status != ?)")
-            where_params.append(fval)
-        elif ftype in ("favorited", "bookmarked", "plan_to_read", "dropped"):
-            col = ftype
-            if fmode == "include":
-                where_clauses.append(f"um.{col} = 1")
-            else:
-                where_clauses.append(f"(um.{col} IS NULL OR um.{col} = 0)")
-        elif ftype == "date":
-            if fop not in (">", "<", "="):
+        elif kind == "status":
+            if value not in ("unread", "reading", "completed"):
                 continue
-            where_clauses.append(f"m.release_date {fop} ?")
-            where_params.append(fval)
+        elif kind == "date":
+            if op not in ("=", ">", "<"):
+                continue
+            try:
+                if len(value) == 4 and value.isascii() and value.isdigit():
+                    date(int(value), 1, 1)
+                elif len(value) == 10 and date.fromisoformat(value).isoformat() == value:
+                    pass
+                else:
+                    continue
+            except ValueError:
+                continue
+        else:
+            continue
+        result.append(dict(type=kind, value=value, mode=mode, op=op if kind == "date" else "="))
+    return result
 
-    where_sql = " AND ".join(where_clauses)
-    return q(f"""
-        SELECT m.id, m.name, m.volume_count, m.cover_path,
-               um.status, um.favorited, um.bookmarked, um.plan_to_read, um.dropped
-        FROM manga m
-        LEFT JOIN user_manga um ON um.manga_id = m.id AND um.user_id = ?
-        WHERE {where_sql}
-        ORDER BY {order}
-    """, [g.user["id"]] + where_params)
+
+def _search_manga(lib_id, text_q, sort, filters, page=1):
+    order = _SORT_MAP.get(sort, _SORT_MAP["name"]) + ", m.id ASC"
+    clauses, params = ["m.lib_id=?"], [lib_id]
+    if text_q:
+        clauses.append("instr(search_text(m.name), search_text(?)) > 0")
+        params.append(text_q)
+    started = """EXISTS (SELECT 1 FROM progress p WHERE p.user_id=um_user.id
+                 AND p.library_id=m.lib_id AND p.manga=m.name)"""
+    for f in filters:
+        kind, value, exclude = f["type"], f["value"], f["mode"] == "exclude"
+        if kind == "tag":
+            clause = """EXISTS (SELECT 1 FROM manga_tags mt JOIN tags t ON t.id=mt.tag_id
+                        WHERE mt.manga_id=m.id AND search_text(t.name)=search_text(?))"""
+            params.append(value)
+        elif kind in ("author", "description"):
+            clause = f"instr(search_text(m.{kind}), search_text(?)) > 0"
+            params.append(value)
+        elif kind == "status":
+            if value == "unread":
+                clause = f"(um.status IS NULL AND NOT {started})"
+            elif value == "reading":
+                clause = f"(COALESCE(um.status, '')='reading' OR (um.status IS NULL AND {started}))"
+            else:
+                clause = "COALESCE(um.status, '')='completed'"
+        elif kind == "date":
+            # A year compares whole years, including metadata stored as YYYY-MM-DD.
+            column = "substr(m.release_date, 1, 4)" if len(value) == 4 else "m.release_date"
+            clause = f"COALESCE({column} {f['op']} ?, 0)"
+            params.append(value)
+        else:
+            clause = f"COALESCE(um.{kind}, 0)=1"
+        clauses.append(f"NOT ({clause})" if exclude else f"({clause})")
+    source = """FROM manga m JOIN users um_user ON um_user.id=?
+                LEFT JOIN user_manga um ON um.manga_id=m.id AND um.user_id=um_user.id
+                WHERE """ + " AND ".join(clauses)
+    params = [g.user["id"]] + params
+    total = q1("SELECT COUNT(*) AS n " + source, params)["n"]
+    total_pages = max(1, (total + MANGA_PER_PAGE - 1) // MANGA_PER_PAGE)
+    page = max(1, min(page, total_pages))
+    rows = q("""SELECT m.id, m.name, m.volume_count, m.cover_path,
+                      um.status, um.favorited, um.bookmarked, um.plan_to_read, um.dropped
+             """ + source + f" ORDER BY {order} LIMIT ? OFFSET ?",
+             params + [MANGA_PER_PAGE, (page - 1) * MANGA_PER_PAGE])
+    return rows, total, total_pages, page
 
 
 @views_bp.route("/l/<int:lib_id>")
 def library(lib_id):
-    import json as _json
+    import json
     lib, root = lib_or_404(lib_id)
-
     text_q = (request.args.get("q") or "").strip()
-    sort   = request.args.get("sort", "name")
+    sort = request.args.get("sort", "name")
+    if sort not in _SORT_MAP:
+        sort = "name"
     try:
-        filters = _json.loads(request.args.get("filters", "[]"))
-        if not isinstance(filters, list):
-            filters = []
+        filters = _clean_filters(json.loads(request.args.get("filters", "[]")))
     except (ValueError, TypeError):
         filters = []
-
-    is_search = bool(text_q or filters or sort != "name")
-
-    if is_search:
-        manga_list = _search_manga(lib_id, text_q, sort, filters)
-        total, total_pages, page = len(manga_list), 1, 1
-    else:
-        try:
-            page = int(request.args.get("page", 1))
-        except (TypeError, ValueError):
-            page = 1
-        manga_list, total, total_pages, page = get_library_page(lib_id, page, g.user["id"])
-        if page != int(request.args.get("page", 1)):
-            return redirect(url_for("views.library", lib_id=lib_id, page=page))
-
+    try:
+        requested_page = int(request.args.get("page", 1))
+    except (TypeError, ValueError):
+        requested_page = 1
+    manga_list, total, total_pages, page = _search_manga(lib_id, text_q, sort, filters, requested_page)
+    def page_url(number):
+        args = dict(lib_id=lib_id, page=number, sort=sort)
+        if text_q:
+            args["q"] = text_q
+        if filters:
+            args["filters"] = json.dumps(filters, ensure_ascii=False)
+        return url_for("views.library", **args)
+    tags = q("""SELECT DISTINCT t.name FROM tags t JOIN manga_tags mt ON mt.tag_id=t.id
+                JOIN manga m ON m.id=mt.manga_id WHERE m.lib_id=?
+                ORDER BY search_text(t.name), t.id""", (lib_id,))
     return render("library.html", lib=lib, manga_list=manga_list, page=page,
-                  total_pages=total_pages, total=total,
-                  progress_set=lib_progress_set(lib_id),
-                  text_q=text_q, sort=sort, filters=filters, is_search=is_search)
+                  total_pages=total_pages, total=total, page_url=page_url, tag_suggestions=tags,
+                  progress_set=lib_progress_set(lib_id), text_q=text_q, sort=sort,
+                  filters=filters, is_search=bool(text_q or filters or sort != "name"))
 
 
 @views_bp.route("/m/<int:manga_id>")
@@ -171,10 +206,14 @@ def api_update_manga_meta(manga_id):
     admin_required()
     manga = manga_or_404(manga_id)
     data = request.get_json(silent=True) or {}
+    author = data.get("author", manga["author"])
+    if author is not None and not isinstance(author, str):
+        return jsonify(error="Author must be text"), 400
+    author = (author or "").strip() or None
     description  = (data.get("description") or "").strip() or None
     release_date = (data.get("release_date") or "").strip() or None
-    ex("UPDATE manga SET description=?, release_date=? WHERE id=?",
-       (description, release_date, manga['id']))
+    ex("UPDATE manga SET description=?, release_date=?, author=? WHERE id=?",
+       (description, release_date, author, manga['id']))
     if "tags" in data:
         tag_names = [t.strip() for t in (data.get("tags") or "").split(",") if t.strip()]
         ex("DELETE FROM manga_tags WHERE manga_id=?", (manga['id'],))

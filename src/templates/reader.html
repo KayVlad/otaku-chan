@@ -27,7 +27,7 @@
 <div id="main" data-title="{{ volume_name }} — {{ manga_name }}" data-reader="1">
   <div
     x-data='reader({{ images | tojson }}, {{ next_volume | tojson }}, {{ prev_volume | tojson }}, {{ lib.id }}, {{ manga_name | urlencode | tojson }}, {{ manga_name | tojson }}, {{ volume_name | tojson }}, {{ resume_page }}, {{ manga_id }})'
-    x-init="init()" @keydown.window="onKey($event)"
+    @keydown.window="onKey($event)"
     style="height:100%;display:flex;flex-direction:column">
     <div class="reader-shell">
       <div class="strip-sidebar" x-ref="strip" x-show="showStrip">
@@ -42,7 +42,7 @@
         <div class="page-stage"
              :class="{ 'zoom-mode': viewMode === 'zoom', dragging: dragging }"
              @pointerdown="startDrag($event)" @pointermove="moveDrag($event)"
-             @pointerup="endDrag()" @pointercancel="endDrag()"
+             @pointerup="endDrag($event)" @pointercancel="endDrag($event)" @lostpointercapture="endDrag($event)" @pointerleave="if (!dragging) endDrag($event)"
              @click="onStageClick()" @dblclick="onDblClick()" @wheel.prevent="onWheel($event)">
           <div class="page-camera" :class="{ dragging: dragging }" :style="cameraStyle">
             <template x-for="(slot, i) in slots" :key="i">
@@ -52,9 +52,9 @@
             </template>
           </div>
           <div class="viewer-nav-overlay" x-show="viewMode === 'fit'">
-            <div class="viewer-zone" @click.stop="rtl ? next() : prev()"></div>
+            <div class="viewer-zone" @click.stop="onStageClick(rtl ? 'next' : 'prev')"></div>
             <div class="viewer-zone-center"></div>
-            <div class="viewer-zone" @click.stop="rtl ? prev() : next()"></div>
+            <div class="viewer-zone" @click.stop="onStageClick(rtl ? 'prev' : 'next')"></div>
           </div>
         </div>
         <div class="viewer-bar">
@@ -67,14 +67,19 @@
             <button class="btn" :class="{active: viewMode === 'zoom'}" @click="setMode('zoom')" title="Zoom &amp; drag">⊕</button>
             <button class="btn" :class="{active: rtl}" @click="toggleRtl()" title="Weeb mode">❀</button>
           </div>
-          <div class="progress-track">
-            <template x-for="(img, i) in images" :key="i">
-              <div class="progress-seg" :class="{ active: i <= currentIdx }" @click.stop="goTo(i)"></div>
-            </template>
+          <div class="zoom-buttons" x-show="viewMode === 'zoom'" x-cloak>
+            <button class="btn" @click="zoomBy(1 / 1.2)" aria-label="Zoom out">−</button>
+            <button class="btn" @click="zoomBy(1.2)" aria-label="Zoom in">+</button>
           </div>
+          <input class="progress-track" type="range" min="0" :max="Math.max(0, images.length - 1)"
+                 step="1" :style="'--page-progress: ' + progress + '%'" :value="currentIdx" :disabled="images.length < 2"
+                 @input="goTo(Number($event.target.value))" aria-label="Page"
+                 :aria-valuetext="'Page ' + (currentIdx + 1) + ' of ' + images.length">
+          <div class="reader-pagination">
           <button class="btn" @click="prev()" style="padding:2px 8px">‹</button>
           <span class="page-indicator" x-text="(currentIdx+1)+' / '+images.length"></span>
           <button class="btn" @click="next()" style="padding:2px 8px">›</button>
+          </div>
         </div>
       </div>
     </div>
