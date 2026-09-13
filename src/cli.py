@@ -12,13 +12,27 @@ import click
 def create_api_token(name):
     """Create an admin-level integration token and print it once."""
     from db import ex
+    name = name.strip()
+    if not name:
+        raise click.UsageError("Token name cannot be empty.")
     token = "oc_" + secrets.token_urlsafe(32)
     ex("""INSERT INTO api_tokens(name,token_hash,created_at)
           VALUES(?,?,?)
           ON CONFLICT(name) DO UPDATE SET token_hash=excluded.token_hash,
               created_at=excluded.created_at,last_used_at=NULL,revoked_at=NULL""",
-       (name.strip(), hashlib.sha256(token.encode("utf-8")).hexdigest(), int(time.time())))
+       (name, hashlib.sha256(token.encode("utf-8")).hexdigest(), int(time.time())))
     click.echo(token)
+
+
+@click.option("--name", required=True, help="Name of the token to revoke.")
+def revoke_api_token(name):
+    """Revoke an integration token by name."""
+    from db import ex
+    result = ex("UPDATE api_tokens SET revoked_at=? WHERE name=? AND revoked_at IS NULL",
+                (int(time.time()), name.strip()))
+    if not result.rowcount:
+        raise click.ClickException("No active token exists with that name.")
+    click.echo(f"Revoked {name.strip()}.")
 
 
 def seed_meta():

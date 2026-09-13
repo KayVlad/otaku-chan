@@ -11,7 +11,7 @@ from progress import progress_bp
 from settings import settings_bp
 from integration import integration_bp
 from uploads import uploads_bp
-from cli import create_api_token, make_sample, seed_meta
+from cli import create_api_token, make_sample, revoke_api_token, seed_meta
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -34,6 +34,7 @@ app.teardown_appcontext(close_db)
 app.cli.command("make-sample")(make_sample)
 app.cli.command("seed-meta")(seed_meta)
 app.cli.command("create-api-token")(create_api_token)
+app.cli.command("revoke-api-token")(revoke_api_token)
 
 init_db()
 init_cache(app, CONTENT_CACHE_DIR)

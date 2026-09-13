@@ -63,3 +63,21 @@ Library maintenance and imports:
 - A successful scan treats the library folder as authoritative: manga, volumes, progress, flags and unused tags that no longer match disk content are deleted instead of accumulating as hidden records. If the library is unavailable or any filesystem read fails, the scan aborts and leaves the database unchanged. Scans run as database transactions; changed source pages invalidate the old SSD snapshot.
 - In a library, drop a ZIP or manga folder, or use **Upload → Choose ZIP / Choose folder**. Structure: `Manga/Volume/images`. Users can upload to libraries they can access. Imports reject existing title names, traversal paths, links, duplicate paths and non-image files. The default request/unpacked limit is 2 GiB and 20,000 images; set `UPLOAD_MAX_BYTES` to change the byte limit. Imports are staged before installation and scanned before the grid refreshes. A ZIP may contain several manga folders; omit an extra library wrapper folder.
 - **Unread all** clears reading progress and resume positions, including progress for missing volumes, while preserving personal flags. Read/unread updates the detail section and status bar through Alpine AJAX. Search ignores accents as well as letter case. Library, reader, settings and search navigation use partial updates; authentication still uses full navigation.
+
+## Companion API
+
+Otakuarr and other trusted companion services use the versioned integration API.
+Create an admin-level bearer token from the Otaku-chan container or source directory:
+
+```sh
+flask --app app create-api-token --name otakuarr
+```
+
+The token is printed once and stored as a SHA-256 digest. Send it as
+`Authorization: Bearer oc_...`. Reissuing the same name rotates the token. Revoke
+it with `flask --app app revoke-api-token --name otakuarr`.
+
+Version 1 provides server status, library and manga catalogs, metadata updates,
+and scan triggers under `/api/v1`. Browser sessions cannot authenticate these
+routes, and bearer tokens do not authenticate browser pages. Library filesystem
+paths and content-cache paths are not returned through the API.

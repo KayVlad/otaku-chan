@@ -65,6 +65,12 @@ class IntegrationApiTests(unittest.TestCase):
         self.assertEqual(result.json["manga"]["author"], "Author")
         self.assertEqual(result.json["manga"]["tags"], ["Adventure", "Completed"])
 
+    def test_cli_revokes_token(self):
+        result = app.test_cli_runner().invoke(args=["revoke-api-token", "--name", "test"])
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("Revoked test", result.output)
+        self.assertEqual(self.client.get("/api/v1/status", headers=self.headers).status_code, 401)
+
 
 if __name__ == "__main__":
     unittest.main()
