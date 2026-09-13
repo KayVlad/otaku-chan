@@ -96,23 +96,40 @@ class LibraryOpsTests(unittest.TestCase):
         with app.app_context():
             db.ex('INSERT INTO libraries(name,path,created_at) VALUES(?,?,0)',('Other',str(other)))
         shutil.move(str(self.library/'Series'),str(other/'Moved'))
-        self.scan(1);self.scan(2)
+        self.scan(2);self.scan(1)
         row=self.row()
         self.assertEqual((row['lib_id'],row['name'],row['available']),(2,'Moved',1))
         with app.app_context():
             self.assertEqual(db.q1('SELECT library_id FROM progress')['library_id'],2)
 
-    def test_missing_then_returning_folder_restores_metadata(self):
+    def test_missing_folder_is_purged_and_returning_folder_is_new(self):
         outside=self.root/'temporarily-out'
         (self.library/'Series').rename(outside)
         self.scan()
-        self.assertEqual(self.row()['available'],0)
+        with app.app_context():
+            self.assertIsNone(db.q1('SELECT * FROM manga WHERE id=?',(self.mid,)))
+            self.assertEqual(db.q1('SELECT COUNT(*) n FROM progress')['n'],0)
+            self.assertEqual(db.q1('SELECT COUNT(*) n FROM user_manga')['n'],0)
+            self.assertEqual(db.q1('SELECT COUNT(*) n FROM manga_tags')['n'],0)
         self.assertEqual(self.client.get(f'/m/{self.mid}').status_code,404)
-        self.assertNotIn(b'class="manga-card ',self.client.get('/l/1').data)
         outside.rename(self.library/'Returned')
         self.scan()
-        self.assertEqual(self.row()['available'],1)
-        self.assertEqual(self.row()['author'],'Émilie')
+        with app.app_context():
+            returned=dict(db.q1("SELECT * FROM manga WHERE name='Returned'"))
+            self.assertIsNone(returned['author'])
+            self.assertEqual(db.q1('SELECT COUNT(*) n FROM manga')['n'],1)
+
+    def test_source_first_cross_library_move_becomes_new_without_stale_rows(self):
+        other=self.root/'other';other.mkdir()
+        with app.app_context():
+            db.ex('INSERT INTO libraries(name,path,created_at) VALUES(?,?,0)',('Other',str(other)))
+        shutil.move(str(self.library/'Series'),str(other/'Moved'))
+        self.scan(1);self.scan(2)
+        with app.app_context():
+            moved=dict(db.q1("SELECT * FROM manga WHERE name='Moved'"))
+            self.assertIsNone(moved['author'])
+            self.assertEqual(db.q1('SELECT COUNT(*) n FROM manga')['n'],1)
+            self.assertEqual(db.q1('SELECT COUNT(*) n FROM progress')['n'],0)
 
     def test_unavailable_and_failed_scan_preserve_rows(self):
         self.library.rename(self.root/'offline')
@@ -149,6 +166,21 @@ class LibraryOpsTests(unittest.TestCase):
         with app.app_context():
             self.assertIsNone(db.q1('SELECT status FROM user_manga')['status'])
             self.assertIsNone(db.q1("SELECT * FROM progress WHERE volume='Volume 1'"))
+            self.assertEqual(db.q1('SELECT COUNT(*) n FROM manga_volumes')['n'],1)
+
+    def test_successful_scan_prunes_legacy_stale_rows_and_unused_tags(self):
+        with app.app_context():
+            db.ex("""INSERT INTO manga(lib_id,name,path,scanned_at,available,folder_id)
+                   VALUES(1,'.missing-old',?,0,0,'missing-identity')""",(str(self.root/'gone'),))
+            db.ex("""INSERT INTO progress(user_id,library_id,manga,volume,updated_at)
+                   VALUES(1,1,'.missing-old','V',0)""")
+            db.ex("INSERT INTO tags(name) VALUES('unused')")
+        self.scan()
+        with app.app_context():
+            self.assertEqual(db.q1('SELECT COUNT(*) n FROM manga WHERE available=0')['n'],0)
+            self.assertEqual(db.q1("SELECT COUNT(*) n FROM manga WHERE name LIKE '.missing-%'")['n'],0)
+            self.assertIsNone(db.q1("SELECT * FROM progress WHERE manga='.missing-old'"))
+            self.assertEqual(db.q1("SELECT COUNT(*) n FROM tags WHERE name='unused'")['n'],0)
 
     def test_scan_transaction_rolls_back_and_database_is_consistent(self):
         (self.library/'Series').rename(self.library/'Renamed')
