@@ -9,8 +9,9 @@ from views import views_bp
 from media import media_bp
 from progress import progress_bp
 from settings import settings_bp
+from integration import integration_bp
 from uploads import uploads_bp
-from cli import make_sample, seed_meta
+from cli import create_api_token, make_sample, seed_meta
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -28,9 +29,11 @@ app.register_blueprint(uploads_bp)
 app.register_blueprint(media_bp)
 app.register_blueprint(progress_bp)
 app.register_blueprint(settings_bp)
+app.register_blueprint(integration_bp)
 app.teardown_appcontext(close_db)
 app.cli.command("make-sample")(make_sample)
 app.cli.command("seed-meta")(seed_meta)
+app.cli.command("create-api-token")(create_api_token)
 
 init_db()
 init_cache(app, CONTENT_CACHE_DIR)

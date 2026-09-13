@@ -17,6 +17,11 @@ def user_count():
 def auth_guard():
     if request.endpoint == "static":
         return
+    # Integration endpoints authenticate independently with an admin-created
+    # bearer token.  Keeping them outside browser sessions also avoids CSRF
+    # and redirect responses in machine clients.
+    if request.blueprint == "integration":
+        return
     if user_count() == 0:
         if request.endpoint != "auth.setup":
             return redirect("/setup")

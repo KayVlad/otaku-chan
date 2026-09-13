@@ -1,6 +1,24 @@
 import random
+import hashlib
+import secrets
 import shutil
+import time
 from pathlib import Path
+
+import click
+
+
+@click.option("--name", required=True, help="Name shown for the integration token.")
+def create_api_token(name):
+    """Create an admin-level integration token and print it once."""
+    from db import ex
+    token = "oc_" + secrets.token_urlsafe(32)
+    ex("""INSERT INTO api_tokens(name,token_hash,created_at)
+          VALUES(?,?,?)
+          ON CONFLICT(name) DO UPDATE SET token_hash=excluded.token_hash,
+              created_at=excluded.created_at,last_used_at=NULL,revoked_at=NULL""",
+       (name.strip(), hashlib.sha256(token.encode("utf-8")).hexdigest(), int(time.time())))
+    click.echo(token)
 
 
 def seed_meta():
