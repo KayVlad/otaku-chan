@@ -28,9 +28,10 @@
   <div class="panel search-panel" x-data="{
          query:   {{ text_q | tojson | forceescape }},
          sortBy:  {{ sort   | tojson | forceescape }},
-         filters: {{ filters | tojson | forceescape }},
-         addFilter()    { this.filters.push({ type: 'tag', value: '', mode: 'include', op: '=' }) },
-         removeFilter(i){ this.filters.splice(i, 1); this.search() },
+         filterSeq: {{ filters | length }},
+         filters: {{ filters | tojson | forceescape }}.map((f, i) => ({ ...f, id: 'filter-' + i })),
+         addFilter()    { this.filters.push({ id: 'filter-' + (++this.filterSeq), type: 'tag', value: '', mode: 'include', op: '=' }) },
+         removeFilter(id){ const i = this.filters.findIndex(f => f.id === id); if (i < 0) return; this.filters.splice(i, 1); this.search() },
          toggleMode(f)  { f.mode = f.mode === 'include' ? 'exclude' : 'include' },
          clearFilters() { this.filters = []; this.search() },
          search() {
@@ -65,7 +66,7 @@
       {% for tag in tag_suggestions %}<option value="{{ tag.name }}"></option>{% endfor %}
     </datalist>
     <div class="filter-bar" x-show="filters.length > 0" x-cloak>
-      <template x-for="(f, i) in filters" :key="i">
+      <template x-for="f in filters" :key="f.id">
         <div class="filter-row-item">
 
           <select class="input filter-type-sel" x-model="f.type" @change="f.value = ''; f.op = '='">
@@ -132,7 +133,7 @@
             </div>
           </template>
 
-          <button class="btn filter-rm-btn" @click="removeFilter(i)" title="Remove filter">×</button>
+          <button type="button" class="btn filter-rm-btn" @click="removeFilter(f.id)" title="Remove filter">×</button>
         </div>
       </template>
       <div class="filter-bar-foot">
