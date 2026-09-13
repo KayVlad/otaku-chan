@@ -6,7 +6,7 @@
 <div id="breadcrumb">
   <span class="crumb-current">Home</span>
   <span class="sb-right">
-    {% if user['is_admin'] %}<a href="/settings" class="tb-link" title="Settings">&#9881;</a>{% endif %}
+    {% if user['is_admin'] %}<a href="/settings" x-target.push="breadcrumb main statusbar" class="tb-link" title="Settings">&#9881;</a>{% endif %}
     <a href="/logout" class="tb-link" title="Log out">&#9211;</a>
   </span>
 </div>
@@ -18,7 +18,7 @@
       <div class="card-row">
         {% for c in cont %}
         <a href="/m/{{ c.manga_id }}/{{ c.volume | urlencode }}"
-          class="manga-card" title="{{ c.manga }} — {{ c.volume }}" x-target.push="toolbar breadcrumb main statusbar">
+          class="manga-card" title="{{ c.manga }} — {{ c.volume }}" x-target.push="breadcrumb main statusbar">
           <div class="manga-card-cover">
             <img
               src="/api/cover/{{ c.manga_id }}"
@@ -43,7 +43,7 @@
   <div class="panel">
     <a id="lib-hidden-toggle"
        href="{{ '/' if show_hidden else '/?show_hidden=1' }}"
-       x-target.push="toolbar breadcrumb main statusbar"
+       x-target.push="breadcrumb main statusbar"
        style="display:none"></a>
     <div class="panel-head {{ 'panel-head--active' if show_hidden }}"
          ondblclick="document.getElementById('lib-hidden-toggle').click()"
@@ -53,7 +53,7 @@
     <div class="panel-body">
       <div class="manga-grid">
         {% for row in lib_rows %}
-        <a href="/l/{{ row.lib.id }}" class="manga-card lib-card" x-target.push="toolbar breadcrumb main statusbar">
+        <a href="/l/{{ row.lib.id }}" class="manga-card lib-card" x-target.push="breadcrumb main statusbar">
           <div class="lib-card-cover">
             <img src="/api/lib/{{ row.lib.id }}/cover" alt=""
               onerror="this.onerror=null; this.src=getMangaPlaceholder({{ row.lib.id + 1001 }})"

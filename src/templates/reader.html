@@ -1,26 +1,26 @@
 <!--<div id="toolbar">
   <a href="/m/{{ manga_id }}" class="btn btn-quiet" data-back
-     x-target.push="toolbar breadcrumb main statusbar">← Volumes</a>
+     x-target.push="breadcrumb main statusbar">← Volumes</a>
   <div class="toolbar-sep"></div>
   {% if prev_volume %}
   <a href="/m/{{ manga_id }}/{{ prev_volume | urlencode }}"
-     class="btn" x-target.push="toolbar breadcrumb main statusbar">‹ Prev</a>
+     class="btn" x-target.push="breadcrumb main statusbar">‹ Prev</a>
   {% else %}<span class="btn btn-dim">‹ Prev</span>{% endif %}
   {% if next_volume %}
   <a href="/m/{{ manga_id }}/{{ next_volume | urlencode }}"
-     class="btn btn-accent" x-target.push="toolbar breadcrumb main statusbar">Next ›</a>
+     class="btn btn-accent" x-target.push="breadcrumb main statusbar">Next ›</a>
   {% else %}<span class="btn btn-dim">Next ›</span>{% endif %}
   <div style="flex:1"></div>
   <span class="tag tag-accent">Vol. {{ volume_index }}/{{ total_volumes }}</span>
 </div>
 -->
 <div id="breadcrumb">
-  <a href="/" x-target.push="toolbar breadcrumb main statusbar">Home</a>
+  <a href="/" x-target.push="breadcrumb main statusbar">Home</a>
   <span class="breadcrumb-sep">»</span>
-  <a href="/l/{{ lib.id }}" x-target.push="toolbar breadcrumb main statusbar">{{ lib.name }}</a>
+  <a href="/l/{{ lib.id }}" x-target.push="breadcrumb main statusbar">{{ lib.name }}</a>
   <span class="breadcrumb-sep">»</span>
-  <a href="/m/{{ manga_id }}"
-     x-target.push="toolbar breadcrumb main statusbar">{{ manga_name }}</a>
+  <a href="/m/{{ manga_id }}" data-back
+     x-target.push="breadcrumb main statusbar">{{ manga_name }}</a>
   <span class="breadcrumb-sep">»</span>
   <span class="crumb-current">{{ volume_name }}</span>
 </div>
@@ -29,6 +29,8 @@
     x-data='reader({{ images | tojson }}, {{ next_volume | tojson }}, {{ prev_volume | tojson }}, {{ lib.id }}, {{ manga_name | urlencode | tojson }}, {{ manga_name | tojson }}, {{ volume_name | tojson }}, {{ resume_page }}, {{ manga_id }})'
     @keydown.window="onKey($event)"
     style="height:100%;display:flex;flex-direction:column">
+    <a :href="nextVolumeUrl" x-target.push="breadcrumb main statusbar" hidden></a>
+    <a :href="prevVolumeUrl" x-target.push="breadcrumb main statusbar" hidden></a>
     <div class="reader-shell">
       <div class="strip-sidebar" x-ref="strip" x-show="showStrip">
         <template x-for="(img, i) in images" :key="i">

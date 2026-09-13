@@ -9,6 +9,7 @@ from views import views_bp
 from media import media_bp
 from progress import progress_bp
 from settings import settings_bp
+from uploads import uploads_bp
 from cli import make_sample, seed_meta
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -23,6 +24,7 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(views_bp)
+app.register_blueprint(uploads_bp)
 app.register_blueprint(media_bp)
 app.register_blueprint(progress_bp)
 app.register_blueprint(settings_bp)

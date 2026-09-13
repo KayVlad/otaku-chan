@@ -2,35 +2,36 @@
   {% if last_volume %}
   <a href="/m/{{ manga["id"] }}/{{ last_volume | urlencode }}"
      class="btn btn-accent" title="{{ last_volume }}"
-     x-target.push="toolbar breadcrumb main statusbar">▶ Continue</a>
+     x-target.push="breadcrumb main statusbar">▶ Continue</a>
   {% else %}{% if volumes %}
   <a href="/m/{{ manga["id"] }}/{{ volumes[0].name | urlencode }}"
      class="btn btn-accent"
-     x-target.push="toolbar breadcrumb main statusbar">▶ Read First</a>
+     x-target.push="breadcrumb main statusbar">▶ Read First</a>
   {% endif %}{% endif %}
 {% if volumes %}
   <div class="toolbar-sep"></div>
   <a href="/m/{{ manga["id"] }}/{{ volumes[-1].name | urlencode }}"
      class="btn btn-quiet"
-     x-target.push="toolbar breadcrumb main statusbar">Read Last</a>
+     x-target.push="breadcrumb main statusbar">Read Last</a>
   {% endif %}
   <div style="flex:1"></div>
   <span class="tag">{{ volumes | length }} volumes</span>
 </div>
 -->
 <div id="breadcrumb">
-  <a href="/" x-target.push="toolbar breadcrumb main statusbar">Home</a>
+  <a href="/" x-target.push="breadcrumb main statusbar">Home</a>
   <span class="breadcrumb-sep">»</span>
-  <a href="/l/{{ lib.id }}" x-target.push="toolbar breadcrumb main statusbar">{{ lib.name }}</a>
+  <a href="/l/{{ lib.id }}" x-target.push="breadcrumb main statusbar">{{ lib.name }}</a>
   <span class="breadcrumb-sep">»</span>
   <span class="crumb-current">{{ manga["name"] }}</span>
   <span class="sb-right">
-    {% if user and user['is_admin'] %}<a href="/settings" class="tb-link" title="Settings">&#9881;</a>{% endif %}
+    {% if user and user['is_admin'] %}<a href="/settings" x-target.push="breadcrumb main statusbar" class="tb-link" title="Settings">&#9881;</a>{% endif %}
     {% if user %}<a href="/logout" class="tb-link" title="Log out">&#9211;</a>{% endif %}
   </span>
 </div>
 
 <div id="main" data-title="{{ manga["name"] }} — Manga Reader">
+  <div id="manga-content">
   {% if volumes %}
 
   <div class="vol-top"
@@ -109,11 +110,11 @@
           {% if last_volume %}
           <a href="/m/{{ manga['id'] }}/{{ last_volume | urlencode }}"
              class="btn btn-accent"
-             x-target.push="toolbar breadcrumb main statusbar">▶ Continue</a>
+             x-target.push="breadcrumb main statusbar">▶ Continue</a>
           {% elif volumes %}
           <a href="/m/{{ manga['id'] }}/{{ volumes[0].name | urlencode }}"
              class="btn btn-accent"
-             x-target.push="toolbar breadcrumb main statusbar">▶ Read First</a>
+             x-target.push="breadcrumb main statusbar">▶ Read First</a>
           {% endif %}
           {% if user and user['is_admin'] %}
           <button class="btn" @click="editing = true">✏ Edit</button>
@@ -155,37 +156,35 @@
     isRead(v) { return !!(this.prog[v] && this.prog[v].read); },
     readCount() { return this.vols.filter(v => this.isRead(v)).length; },
     allRead() { return this.vols.length > 0 && this.vols.every(v => this.isRead(v)); },
-    async toggleVol(v) {
-      const nowRead = !this.isRead(v);
-      if (!this.prog[v]) this.prog[v] = {};
-      this.prog[v].read = nowRead ? 1 : 0;
-      await fetch('/api/m/{{ manga['id'] }}/volume/' + encodeURIComponent(v) + '/read', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({read: nowRead})
-      });
+    busy: false, error: '',
+    async updateRead(url, read) {
+      if (this.busy) return;
+      this.busy = true; this.error = '';
+      try {
+        await this.$ajax(url, { method: 'POST', target: 'manga-content statusbar',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({read}) });
+      } catch (error) { this.error = 'Could not update reading status. Try again.'; }
+      finally { this.busy = false; }
     },
-    async markAll(read) {
-      this.vols.forEach(v => { if (!this.prog[v]) this.prog[v] = {}; this.prog[v].read = read ? 1 : 0; });
-      await fetch('/api/m/{{ manga['id'] }}/read-all', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({read: read})
-      });
-    }
+    toggleVol(v) { return this.updateRead('/api/m/{{ manga['id'] }}/volume/' + encodeURIComponent(v) + '/read', !this.isRead(v)); },
+    markAll(read) { return this.updateRead('/api/m/{{ manga['id'] }}/read-all', read); }
+
   }">
     <div class="panel-head">
       Volumes
       <span class="panel-head-count" x-text="readCount() + ' / {{ volumes | length }} read'"></span>
       <span style="flex:1"></span>
       <button class="btn btn-quiet vol-mark-all-btn"
-              @click="markAll(!allRead())"
+              @click="markAll(!allRead())" :disabled="busy"
               x-text="allRead() ? 'Unread all' : 'Read all'"></button>
     </div>
+    <p class="flash" x-show="error" x-text="error" x-cloak></p>
     <div class="vol-list">
       {% for vol in volumes %}
       <a href="{{ url_for('views.reader', manga_id=manga['id'], volume_name=vol['name']) }}"
          class="vol-row{% if vol.name == last_volume %} vol-row-current{% endif %}"
          :class="isRead(vols[{{ loop.index0 }}]) && 'vol-row-read'"
-         x-target.push="toolbar breadcrumb main statusbar">
+         x-target.push="breadcrumb main statusbar">
         <span class="vol-row-name">{{ vol.name }}</span>
         <span class="vol-row-progress">
           <span x-show="isRead(vols[{{ loop.index0 }}])">✓</span>
@@ -193,8 +192,8 @@
                 x-text="prog[vols[{{ loop.index0 }}]] ? 'p.' + (prog[vols[{{ loop.index0 }}]].page + 1) + '/' + prog[vols[{{ loop.index0 }}]].total : ''"></span>
         </span>
         <span class="vol-row-count">{{ vol.image_count }}p</span>
-        <button class="vol-row-mark"
-                @click.stop="toggleVol(vols[{{ loop.index0 }}])"
+        <button class="vol-row-mark" :disabled="busy"
+                @click.stop.prevent="toggleVol(vols[{{ loop.index0 }}])"
                 :title="isRead(vols[{{ loop.index0 }}]) ? 'Mark unread' : 'Mark read'">
           <span x-text="isRead(vols[{{ loop.index0 }}]) ? '✓' : '○'"></span>
         </button>
@@ -214,6 +213,7 @@
     </div>
   </div>
   {% endif %}
+  </div>
 </div>
 
 <div id="statusbar">

@@ -40,6 +40,10 @@ def manga_progress(lib_id, manga):
 
 
 def set_volume_read(lib_id, manga, volume, read):
+    if not read:
+        ex("DELETE FROM progress WHERE user_id=? AND library_id=? AND manga=? AND volume=?",
+           (g.user["id"], lib_id, manga, volume))
+        return
     ex("""INSERT INTO progress (user_id, library_id, manga, volume, page, total, read, updated_at)
           VALUES (?,?,?,?,0,1,?,?)
           ON CONFLICT(user_id, library_id, manga, volume) DO UPDATE SET
@@ -53,22 +57,14 @@ def sync_completion(manga_id, lib_id, manga_name):
     if not manga_row:
         return
     current = {d.name for d in visible_dirs(Path(manga_row["path"]))}
-    if not current:
-        return
-    read = {r["volume"] for r in q(
-        "SELECT volume FROM progress WHERE user_id=? AND library_id=? AND manga=? AND read=1",
-        (g.user["id"], lib_id, manga_name))}
-    now = int(time.time() * 1000)
-    if current <= read:
-        ex("""INSERT INTO user_manga (user_id, manga_id, status, updated_at)
-              VALUES (?,?,'completed',?)
-              ON CONFLICT(user_id, manga_id) DO UPDATE SET
-                status='completed', updated_at=excluded.updated_at""",
-           (g.user["id"], manga_id, now))
-    else:
-        ex("""UPDATE user_manga SET status='reading', updated_at=?
-              WHERE user_id=? AND manga_id=? AND status='completed'""",
-           (now, g.user["id"], manga_id))
+    rows = q("SELECT volume,read FROM progress WHERE user_id=? AND library_id=? AND manga=?",
+             (g.user["id"], lib_id, manga_name))
+    started = {r["volume"] for r in rows} & current
+    read = {r["volume"] for r in rows if r["read"]} & current
+    status = 'completed' if current and current <= read else ('reading' if started else None)
+    ex("""INSERT INTO user_manga(user_id,manga_id,status,updated_at) VALUES(?,?,?,?)
+          ON CONFLICT(user_id,manga_id) DO UPDATE SET status=excluded.status,updated_at=excluded.updated_at""",
+       (g.user["id"],manga_id,status,int(time.time()*1000)))
 
 
 def lib_progress_set(lib_id):
@@ -92,11 +88,11 @@ def continue_list(show_hidden=False):
               FROM progress WHERE user_id=?
               GROUP BY library_id, manga) x
           ON x.library_id = p.library_id AND x.manga = p.manga AND x.mu = p.updated_at
-        WHERE p.user_id=? {hidden_filter}
+        WHERE p.user_id=? AND m.available=1 {hidden_filter}
           AND (um.status IS NULL OR um.status != 'completed')
         ORDER BY p.updated_at DESC LIMIT ?""",
         (g.user["id"], g.user["id"], CONTINUE_LIMIT))
-    return [dict(r) for r in rows if (Path(r["lib_path"]) / r["manga"]).is_dir()]
+    return [dict(r) for r in rows if (Path(r["lib_path"]) / r["manga"] / r["volume"]).is_dir()]
 
 
 @progress_bp.route("/api/progress", methods=["POST"])
@@ -110,6 +106,11 @@ def api_progress():
         volume = str(data["volume"])
     except (KeyError, ValueError, TypeError):
         abort(400)
-    lib_or_404(lib_id)
+    _, root = lib_or_404(lib_id)
+    from helpers import safe_path
+    if not q1("SELECT id FROM manga WHERE lib_id=? AND name=? AND available=1", (lib_id, manga)):
+        abort(404)
+    if volume not in {p.name for p in visible_dirs(safe_path(root, manga))}:
+        abort(404)
     save_progress(lib_id, manga, volume, min(page, total - 1), total)
     return jsonify(ok=True)

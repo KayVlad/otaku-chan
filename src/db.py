@@ -5,7 +5,7 @@ from config import DB_PATH
 
 
 def init_db():
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, timeout=30)
     con.executescript("""
         PRAGMA journal_mode=WAL;
         CREATE TABLE IF NOT EXISTS users (
@@ -79,16 +79,24 @@ def init_db():
     columns = {row[1] for row in con.execute("PRAGMA table_info(manga)")}
     if "author" not in columns:
         con.execute("ALTER TABLE manga ADD COLUMN author TEXT")
+    for name, kind in [('folder_id', 'TEXT'), ('content_revision', 'TEXT'), ('available', 'INTEGER NOT NULL DEFAULT 1')]:
+        if name not in columns:
+            con.execute(f'ALTER TABLE manga ADD COLUMN {name} {kind}')
+    con.execute('CREATE INDEX IF NOT EXISTS idx_manga_folder ON manga(folder_id)')
+    con.execute('''CREATE TABLE IF NOT EXISTS manga_volumes (
+        manga_id INTEGER NOT NULL REFERENCES manga(id) ON DELETE CASCADE,
+        folder_id TEXT NOT NULL, name TEXT NOT NULL, available INTEGER NOT NULL DEFAULT 1,
+        PRIMARY KEY(manga_id,folder_id))''')
     con.commit()
     con.close()
 
 
 def db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
+        g.db = sqlite3.connect(DB_PATH, timeout=30)
         g.db.row_factory = sqlite3.Row
         g.db.create_function("search_text", 1,
-                             lambda value: unicodedata.normalize("NFKC", value or "").casefold(),
+                             lambda value: "".join(c for c in unicodedata.normalize("NFKD", value or "").casefold() if not unicodedata.combining(c)),
                              deterministic=True)
         g.db.execute("PRAGMA foreign_keys=ON")
     return g.db

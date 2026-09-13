@@ -6,49 +6,9 @@ from helpers import natural_sort_key, safe_iterdir, safe_path
 import time
 
 def scan_lib(lib_id: int):
-    row = q1("SELECT * FROM libraries WHERE id=?", (lib_id,))
-    if row is None:
-        return
-    
-    root = Path(row["path"])
-    if not root.is_dir():
-        return
-    
-    existing = {r["name"]: r for r in q(
-        "SELECT * FROM manga WHERE lib_id=?", (lib_id,))}
-    
-    on_disk = {d.name for d in visible_dirs(root)}
-    
-    deleted = set(existing.keys()) - on_disk
-    if deleted:
-        ex("DELETE FROM manga WHERE lib_id=? AND name IN ({})".format(
-            ",".join("?" * len(deleted))),
-           (lib_id, *deleted))
-    
-    now = int(time.time() * 1000)
-    for name in on_disk:
-        manga_path = root / name
-        chapters = visible_dirs(manga_path)
-        volume_count = len(chapters)
-        cover_path = has_cover(manga_path)
+    from reconcile import scan_library
+    return scan_library(lib_id)
 
-        ex("""INSERT INTO manga (lib_id, name, path, volume_count, cover_path, scanned_at)
-              VALUES (?,?,?,?,?,?)
-              ON CONFLICT(lib_id, name) DO UPDATE SET
-                volume_count = excluded.volume_count,
-                cover_path   = excluded.cover_path,
-                scanned_at   = excluded.scanned_at""",
-           (lib_id, name, str(manga_path), volume_count, cover_path, now))
-        manga_id = q1("SELECT id FROM manga WHERE lib_id=? AND name=?", (lib_id, name))["id"]
-        current = {chapter.name for chapter in chapters}
-        for user in q("SELECT user_id FROM user_manga WHERE manga_id=? AND status='completed'", (manga_id,)):
-            read = {r["volume"] for r in q(
-                "SELECT volume FROM progress WHERE user_id=? AND library_id=? AND manga=? AND read=1",
-                (user["user_id"], lib_id, name))}
-            if current - read:
-                ex("UPDATE user_manga SET status='reading', updated_at=? WHERE user_id=? AND manga_id=?",
-                   (now, user["user_id"], manga_id))
-   
 def visible_dirs(path: Path):
     return sorted(
         (d for d in safe_iterdir(path) if d.is_dir() and not d.name.startswith(".")),
@@ -77,7 +37,7 @@ def has_cover(manga_path: Path) -> bool:
 
 
 def get_library_page(lib_id: int, page: int, user_id: int = None):
-    total = q1("SELECT COUNT(*) c FROM manga WHERE lib_id=?", (lib_id,))['c']
+    total = q1("SELECT COUNT(*) c FROM manga WHERE lib_id=? AND available=1", (lib_id,))['c']
     total_pages = max(1, (total + MANGA_PER_PAGE - 1) // MANGA_PER_PAGE)
     page = max(1, min(page, total_pages))
     if user_id:
@@ -85,10 +45,10 @@ def get_library_page(lib_id: int, page: int, user_id: int = None):
                            um.plan_to_read, um.dropped
                     FROM manga m
                     LEFT JOIN user_manga um ON um.manga_id = m.id AND um.user_id = ?
-                    WHERE m.lib_id=? ORDER BY m.name COLLATE NOCASE LIMIT ? OFFSET ?""",
+                    WHERE m.lib_id=? AND m.available=1 ORDER BY m.name COLLATE NOCASE LIMIT ? OFFSET ?""",
                  (user_id, lib_id, MANGA_PER_PAGE, (page - 1) * MANGA_PER_PAGE))
     else:
-        rows = q("SELECT * FROM manga WHERE lib_id=? ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?",
+        rows = q("SELECT * FROM manga WHERE lib_id=? AND available=1 ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?",
                  (lib_id, MANGA_PER_PAGE, (page - 1) * MANGA_PER_PAGE))
     return rows, total, total_pages, page
 
@@ -136,7 +96,7 @@ def accessible_libraries(show_hidden=False):
 def manga_or_404(manga_id: int):
     row = q1("""SELECT m.*, l.name AS lib_name, l.path AS lib_path
                 FROM manga m JOIN libraries l ON l.id = m.lib_id
-                WHERE m.id=?""", (manga_id,))
+                WHERE m.id=? AND m.available=1""", (manga_id,))
     if row is None:
         abort(404)
     if not g.user["is_admin"]:

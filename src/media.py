@@ -44,7 +44,8 @@ def _send_cover(manga_path: Path):
 #            im.save(out, "JPEG", quality=82)
 #        return send_file(out)
 #    except Exception:
-    return None
+    image = first_image(manga_path)
+    return send_file(image) if image else None
 
 
 @media_bp.route("/api/cover/<int:manga_id>")
@@ -52,7 +53,7 @@ def serve_manga_cover(manga_id):
     manga = manga_or_404(manga_id)
     if not manga["cover_path"]:
         abort(404)
-    return _send_cover(Path(manga["path"])) or ""
+    return _send_cover(Path(manga["path"])) or ("", 404)
 
 
 @media_bp.route("/cover/<int:lib_id>/<manga_name>")
@@ -62,3 +63,14 @@ def serve_cover(lib_id, manga_name):
     if not manga_path.is_dir():
         abort(404)
     return _send_cover(manga_path)
+
+
+@media_bp.route("/api/lib/<int:lib_id>/cover")
+def serve_library_cover(lib_id):
+    lib_or_404(lib_id)
+    from db import q
+    for manga in q("SELECT path FROM manga WHERE lib_id=? AND available=1 AND cover_path=1 ORDER BY name COLLATE NOCASE", (lib_id,)):
+        cover = _send_cover(Path(manga['path']))
+        if cover is not None:
+            return cover
+    abort(404)

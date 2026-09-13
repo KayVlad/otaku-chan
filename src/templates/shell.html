@@ -6,6 +6,7 @@
   <title>Manga Reader</title>
   <style>html{background:#0d1020}</style>
   <script src="/static/scripts/manga-placeholder.js"></script>
+  <script src="/static/scripts/library-upload.js"></script>
   <script>
   function reader(images, nextVolumeName, prevVolumeName, libId, mangaEncoded, mangaName, volumeName, resumePage, mangaId) {
     return {
@@ -126,7 +127,7 @@
 
       _navToVolume(url, entry) {
         sessionStorage.setItem('mr-entry', entry);
-        const link = document.querySelector(`#toolbar a[href="${url}"]`);
+        const link = document.querySelector(`#main a[href="${url}"]`);
         if (link) link.click(); else window.location.href = url;
       },
 
@@ -213,7 +214,7 @@
           '-': () => this.zoomBy(1 / 1.2), '0': () => this.resetZoom(),
           'f': () => { if (this.viewMode === 'zoom') { this.resetZoom() } },
           'm': () => this.setMode(this.viewMode === 'fit' ? 'zoom' : 'fit'),
-          Escape: () => document.querySelector('#toolbar a[data-back]')?.click(),
+          Escape: () => document.querySelector('#breadcrumb a[data-back]')?.click(),
         };
         if (map[e.key]) { e.preventDefault(); map[e.key](); }
       },

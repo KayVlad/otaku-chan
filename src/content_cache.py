@@ -53,6 +53,8 @@ class ContentCache:
                 return None
             if meta.get("source") != str(Path(manga["path"]).absolute()):
                 return None
+            if meta.get('revision') != dict(manga).get('content_revision'):
+                return None
             data = entry / "data"
             if data.is_symlink() or not data.is_dir():
                 return None
@@ -106,6 +108,7 @@ class ContentCache:
             shutil.copytree(source, partial / "data", ignore=skip_links)
             (partial / "entry.json").write_text(json.dumps({
                 "source": str(Path(manga["path"]).absolute()), "copied_at": copied_at,
+                "revision": manga.get("content_revision"),
             }))
             with self._lock:
                 partial.rename(entry)

@@ -1,14 +1,28 @@
 
 <div id="breadcrumb">
-  <a href="/" x-target.push="toolbar breadcrumb main statusbar">Home</a>
+  <a href="/" x-target.push="breadcrumb main statusbar">Home</a>
   <span class="breadcrumb-sep">»</span>
   <span class="crumb-current">{{ lib.name }}</span>
   <span class="sb-right">
-    {% if user and user['is_admin'] %}<a href="/settings" class="tb-link" title="Settings">&#9881;</a>{% endif %}
+    {% if user and user['is_admin'] %}<a href="/settings" x-target.push="breadcrumb main statusbar" class="tb-link" title="Settings">&#9881;</a>{% endif %}
     {% if user %}<a href="/logout" class="tb-link" title="Log out">&#9211;</a>{% endif %}
   </span>
 </div>
-<div id="main" data-title="{{ lib.name }} — Manga Reader">
+<div id="main" data-title="{{ lib.name }} — Manga Reader" x-data="libraryUpload({{ lib.id }})"
+     @dragenter.prevent="if ($event.dataTransfer.types.includes('Files')) dragDepth++"
+     @dragover.prevent @dragleave.prevent="dragDepth = Math.max(0, dragDepth - 1)" @drop.prevent="dropped($event)">
+  <div class="upload-drop-hint" x-show="dragDepth > 0" x-cloak>Drop ZIP or manga folder to upload</div>
+  <div class="panel" x-show="uploadOpen" x-cloak>
+    <div class="panel-head">Upload manga <button class="btn btn-quiet" @click="uploadOpen=false" :disabled="uploading">Close</button></div>
+    <div class="panel-body">
+      <p>Use Manga / Volume / images inside the ZIP or selected folder. Existing titles are never overwritten.</p>
+      <label class="btn upload-picker">Choose ZIP<input type="file" accept=".zip" multiple :disabled="uploading"
+        @change="upload(Array.from($event.target.files).map(f => [f.name, f])); $event.target.value = ''"></label>
+      <label class="btn upload-picker">Choose folder<input type="file" webkitdirectory multiple :disabled="uploading"
+        @change="upload(Array.from($event.target.files).map(f => [f.webkitRelativePath, f])); $event.target.value = ''"></label>
+      <p role="status" x-text="uploadMessage"></p>
+    </div>
+  </div>
 
   <!-- Search panel -->
   <div class="panel search-panel" x-data="{
@@ -29,7 +43,7 @@
            this.$refs.nav.click();
          }
        }">
-    <a x-ref="nav" href="#" x-target.push="toolbar breadcrumb main statusbar" style="display:none"></a>
+    <a x-ref="nav" href="#" x-target.push="breadcrumb main statusbar" style="display:none"></a>
     <div class="search-ctrl-row">
       <input type="text" class="input search-input" placeholder="Search titles…"
              x-model="query" @keydown.enter="search()">
@@ -134,15 +148,16 @@
       {% if is_search %}
       <span class="panel-head-count">{{ total }} result{{ 's' if total != 1 }}</span>
       <a href="/l/{{ lib.id }}" class="btn btn-quiet" style="margin-left:6px;font-size:11px"
-         x-target.push="toolbar breadcrumb main statusbar">✕ Clear</a>
+         x-target.push="breadcrumb main statusbar">✕ Clear</a>
       {% else %}
       <span class="panel-head-count">{{ total }} titles{% if total_pages > 1 %} · page {{ page }}/{{ total_pages }}{% endif %}</span>
       {% endif %}
+      <button class="btn btn-quiet" style="margin-left:auto" @click="uploadOpen=!uploadOpen" title="Upload manga">↑ Upload</button>
       {% if user.is_admin %}
       <span class="ph-right" x-data="{ scanning: false, msg: '' }">
         <span class="scan-msg" x-show="msg" x-text="msg"></span>
         <a class="tb-link" x-ref="reload"
-           href="/l/{{ lib.id }}" x-target.push="toolbar breadcrumb main statusbar"
+           href="/l/{{ lib.id }}" x-target.push="breadcrumb main statusbar"
            style="display:none"></a>
         <a class="tb-link"
            :style="scanning ? 'animation: spin 0.8s linear infinite; display:inline-block' : ''"
@@ -150,8 +165,9 @@
            @click.prevent="if (scanning) return;
              scanning = true; msg = 'Scanning…';
              fetch('/api/lib/{{ lib.id }}/scan', { method: 'POST' })
-               .then(() => { msg = 'Reloading…'; setTimeout(() => $refs.reload.click(), 2500); })
-               .catch(() => { scanning = false; msg = 'Error'; setTimeout(() => msg = '', 3000); })"
+               .then(async r => { if (!r.ok) throw new Error(); await $ajax(window.location.href, { target: 'breadcrumb main statusbar' }); })
+               .catch(() => { scanning = false; msg = 'Scan failed. Check storage and retry.'; })"
+
            title="Scan library">↺</a>
       </span>
       {% endif %}
@@ -162,7 +178,7 @@
         {% for manga in manga_list %}
         <a href="/m/{{ manga.id }}"
            class="manga-card {{ 'has-progress' if manga.name in progress_set }}"
-           title="{{ manga.name }}" x-target.push="toolbar breadcrumb main statusbar">
+           title="{{ manga.name }}" x-target.push="breadcrumb main statusbar">
           <div class="manga-card-cover">
             {% if manga.cover_path %}<img
               src="/api/cover/{{ manga.id }}"
@@ -186,15 +202,15 @@
       </div>
       {% if total_pages > 1 %}
       <div class="pagination">
-        {% if page > 1 %}<a href="{{ page_url(page - 1) }}" class="btn page-btn" x-target.push="toolbar breadcrumb main statusbar">‹</a>
+        {% if page > 1 %}<a href="{{ page_url(page - 1) }}" class="btn page-btn" x-target.push="breadcrumb main statusbar">‹</a>
         {% else %}<span class="btn page-btn btn-dim">‹</span>{% endif %}
         {% for p in range(1, total_pages + 1) %}
           {% if p == page %}<span class="btn page-btn page-btn-active">{{ p }}</span>
           {% elif p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
-            <a href="{{ page_url(p) }}" class="btn page-btn" x-target.push="toolbar breadcrumb main statusbar">{{ p }}</a>
+            <a href="{{ page_url(p) }}" class="btn page-btn" x-target.push="breadcrumb main statusbar">{{ p }}</a>
           {% elif p == page - 3 or p == page + 3 %}<span style="color:var(--text-dim);padding:0 2px">…</span>{% endif %}
         {% endfor %}
-        {% if page < total_pages %}<a href="{{ page_url(page + 1) }}" class="btn page-btn" x-target.push="toolbar breadcrumb main statusbar">›</a>
+        {% if page < total_pages %}<a href="{{ page_url(page + 1) }}" class="btn page-btn" x-target.push="breadcrumb main statusbar">›</a>
         {% else %}<span class="btn page-btn btn-dim">›</span>{% endif %}
         <span class="pagination-info">{{ page }} / {{ total_pages }}</span>
       </div>

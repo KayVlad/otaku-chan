@@ -5,7 +5,7 @@ from config import MANGA_PER_PAGE
 from db import ex, q, q1
 from libraries import (accessible_libraries, get_volumes, get_images, get_library_page,
                        lib_or_404, manga_or_404, scan_lib, visible_dirs)
-from helpers import render
+from helpers import render, is_ajax
 from progress import continue_list, lib_progress_set, manga_progress, set_volume_read, sync_completion
 
 views_bp = Blueprint("views", __name__)
@@ -77,12 +77,14 @@ def _clean_filters(raw):
 
 def _search_manga(lib_id, text_q, sort, filters, page=1):
     order = _SORT_MAP.get(sort, _SORT_MAP["name"]) + ", m.id ASC"
-    clauses, params = ["m.lib_id=?"], [lib_id]
+    clauses, params = ["m.lib_id=?", "m.available=1"], [lib_id]
     if text_q:
         clauses.append("instr(search_text(m.name), search_text(?)) > 0")
         params.append(text_q)
     started = """EXISTS (SELECT 1 FROM progress p WHERE p.user_id=um_user.id
-                 AND p.library_id=m.lib_id AND p.manga=m.name)"""
+                 AND p.library_id=m.lib_id AND p.manga=m.name
+                 AND (NOT EXISTS (SELECT 1 FROM manga_volumes v WHERE v.manga_id=m.id)
+                      OR EXISTS (SELECT 1 FROM manga_volumes v WHERE v.manga_id=m.id AND v.name=p.volume AND v.available=1)))"""
     for f in filters:
         kind, value, exclude = f["type"], f["value"], f["mode"] == "exclude"
         if kind == "tag":
@@ -146,7 +148,7 @@ def library(lib_id):
             args["filters"] = json.dumps(filters, ensure_ascii=False)
         return url_for("views.library", **args)
     tags = q("""SELECT DISTINCT t.name FROM tags t JOIN manga_tags mt ON mt.tag_id=t.id
-                JOIN manga m ON m.id=mt.manga_id WHERE m.lib_id=?
+                JOIN manga m ON m.id=mt.manga_id WHERE m.lib_id=? AND m.available=1
                 ORDER BY search_text(t.name), t.id""", (lib_id,))
     return render("library.html", lib=lib, manga_list=manga_list, page=page,
                   total_pages=total_pages, total=total, page_url=page_url, tag_suggestions=tags,
@@ -249,16 +251,13 @@ def api_update_user_manga(manga_id):
 
 @views_bp.route("/api/lib/<int:lib_id>/scan", methods=["POST"])
 def api_scan_lib(lib_id):
-    import threading
-    from flask import current_app
     from auth import admin_required
     admin_required()
     lib_or_404(lib_id)
-    app = current_app._get_current_object()
-    def _run():
-        with app.app_context():
-            scan_lib(lib_id)
-    threading.Thread(target=_run, daemon=True).start()
+    try:
+        scan_lib(lib_id)
+    except OSError:
+        return jsonify(error="Library scan failed; metadata was preserved. Check storage and permissions."), 409
     return jsonify(ok=True)
 
 
@@ -274,9 +273,12 @@ def api_mark_volume_read(manga_id, volume_name):
     manga = manga_or_404(manga_id)
     data = request.get_json(silent=True) or {}
     read = bool(data.get("read", True))
+    from helpers import safe_path
+    if volume_name not in {p.name for p in visible_dirs(Path(manga['path']))}:
+        abort(404)
     set_volume_read(manga['lib_id'], manga['name'], volume_name, read)
     sync_completion(manga_id, manga['lib_id'], manga['name'])
-    return jsonify(ok=True)
+    return manga_detail(manga_id) if is_ajax() else jsonify(ok=True)
 
 
 @views_bp.route("/api/m/<int:manga_id>/read-all", methods=["POST"])
@@ -284,7 +286,10 @@ def api_mark_all_read(manga_id):
     manga = manga_or_404(manga_id)
     data = request.get_json(silent=True) or {}
     read = bool(data.get("read", True))
+    if not read:
+        ex("DELETE FROM progress WHERE user_id=? AND library_id=? AND manga=?",
+           (g.user['id'], manga['lib_id'], manga['name']))
     for vol in get_volumes(Path(manga['path'])):
         set_volume_read(manga['lib_id'], manga['name'], vol['name'], read)
     sync_completion(manga_id, manga['lib_id'], manga['name'])
-    return jsonify(ok=True)
+    return manga_detail(manga_id) if is_ajax() else jsonify(ok=True)
