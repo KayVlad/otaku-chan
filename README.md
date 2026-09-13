@@ -78,6 +78,9 @@ The token is printed once and stored as a SHA-256 digest. Send it as
 it with `flask --app app revoke-api-token --name otakuarr`.
 
 Version 1 provides server status, library and manga catalogs, metadata updates,
-and scan triggers under `/api/v1`. Browser sessions cannot authenticate these
-routes, and bearer tokens do not authenticate browser pages. Library filesystem
-paths and content-cache paths are not returned through the API.
+cover uploads, and scan triggers under `/api/v1`. Upload a cover with a multipart
+`PUT /api/v1/manga/<id>/cover` request whose file field is named `cover`. Images
+are validated, resized to at most 1200×1800, and stored as the manga's custom
+`.cache/cover.jpg`. Browser sessions cannot authenticate these routes, and bearer
+tokens do not authenticate browser pages. Library filesystem paths and
+content-cache paths are not returned through the API.

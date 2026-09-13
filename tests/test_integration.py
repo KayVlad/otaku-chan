@@ -1,10 +1,13 @@
 import hashlib
+import io
 import os
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
+
+from PIL import Image
 
 
 _boot = tempfile.TemporaryDirectory(prefix="otaku-integration-boot-")
@@ -64,6 +67,34 @@ class IntegrationApiTests(unittest.TestCase):
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.json["manga"]["author"], "Author")
         self.assertEqual(result.json["manga"]["tags"], ["Adventure", "Completed"])
+
+    def test_uploads_and_replaces_cover(self):
+        image = io.BytesIO()
+        Image.new("RGB", (1600, 2400), "red").save(image, "PNG")
+        image.seek(0)
+        result = self.client.put(
+            f"/api/v1/manga/{self.manga_id}/cover",
+            headers=self.headers,
+            data={"cover": (image, "provider.png")},
+        )
+        self.assertEqual(result.status_code, 200)
+        cover_path = self.root / "library" / "Series" / ".cache" / "cover.jpg"
+        self.assertTrue(cover_path.is_file())
+        with Image.open(cover_path) as cover:
+            self.assertEqual(cover.format, "JPEG")
+            self.assertEqual(cover.size, (1200, 1800))
+        served = self.client.get(f"/api/cover/{self.manga_id}")
+        self.assertEqual(served.status_code, 200)
+        served.close()
+
+    def test_rejects_invalid_cover(self):
+        result = self.client.put(
+            f"/api/v1/manga/{self.manga_id}/cover",
+            headers=self.headers,
+            data={"cover": (io.BytesIO(b"not an image"), "cover.jpg")},
+        )
+        self.assertEqual(result.status_code, 400)
+        self.assertIn("supported image", result.json["error"])
 
     def test_cli_revokes_token(self):
         result = app.test_cli_runner().invoke(args=["revoke-api-token", "--name", "test"])

@@ -2,16 +2,25 @@
 
 import hashlib
 import hmac
+import io
+import os
 import time
 from datetime import date
+from pathlib import Path
 
 from flask import Blueprint, abort, jsonify, request
+from PIL import Image, ImageOps, UnidentifiedImageError
 
+from config import CACHE_DIR
 from db import db, q, q1
 from libraries import scan_lib
 
 
 integration_bp = Blueprint("integration", __name__, url_prefix="/api/v1")
+
+MAX_COVER_BYTES = 10 * 1024 * 1024
+MAX_COVER_SIZE = (1200, 1800)
+MAX_COVER_PIXELS = 40_000_000
 
 
 def _token_hash(value):
@@ -129,6 +138,56 @@ def update_metadata(manga_id):
     con.commit()
     row = q1("SELECT * FROM manga WHERE id=?", (manga_id,))
     return jsonify(manga=_manga_json(row))
+
+
+@integration_bp.put("/manga/<int:manga_id>/cover")
+def update_cover(manga_id):
+    manga = q1("SELECT * FROM manga WHERE id=? AND available=1", (manga_id,))
+    if manga is None:
+        abort(404)
+    upload = request.files.get("cover")
+    if upload is None or not upload.filename:
+        return jsonify(error="A multipart cover file is required."), 400
+    content = upload.stream.read(MAX_COVER_BYTES + 1)
+    if len(content) > MAX_COVER_BYTES:
+        return jsonify(error="The cover must be 10 MB or smaller."), 413
+
+    try:
+        with Image.open(io.BytesIO(content)) as source:
+            if source.width * source.height > MAX_COVER_PIXELS:
+                return jsonify(error="The uploaded cover has too many pixels."), 400
+            source.load()
+            cover = ImageOps.exif_transpose(source).convert("RGB")
+    except (UnidentifiedImageError, Image.DecompressionBombError, OSError, ValueError):
+        return jsonify(error="The uploaded cover is not a supported image."), 400
+    if cover.width < 1 or cover.height < 1:
+        cover.close()
+        return jsonify(error="The uploaded cover has invalid dimensions."), 400
+    cover.thumbnail(MAX_COVER_SIZE)
+
+    cache = Path(manga["path"]) / CACHE_DIR
+    if cache.is_symlink():
+        cover.close()
+        return jsonify(error="The manga cover directory cannot be a symbolic link."), 409
+    try:
+        cache.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        cover.close()
+        return jsonify(error="The cover directory could not be created in the manga folder."), 409
+    output = cache / "cover.jpg"
+    temporary = cache / f".cover-{os.getpid()}-{time.time_ns()}.tmp"
+    try:
+        cover.save(temporary, "JPEG", quality=88, optimize=True)
+        os.replace(temporary, output)
+    except OSError:
+        temporary.unlink(missing_ok=True)
+        return jsonify(error="The cover could not be written to the manga folder."), 409
+    finally:
+        cover.close()
+
+    db().execute("UPDATE manga SET cover_path=1 WHERE id=?", (manga_id,))
+    db().commit()
+    return jsonify(ok=True, cover=f"/api/cover/{manga_id}")
 
 
 @integration_bp.post("/libraries/<int:lib_id>/scan")
