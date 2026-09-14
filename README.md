@@ -73,6 +73,13 @@ Create an admin-level bearer token from the Otaku-chan container or source direc
 flask --app app create-api-token --name otakuarr
 ```
 
+With Docker Compose, run it from the application directory. The explicit
+working directory also works with older images:
+
+```sh
+docker compose exec -w /app/src app flask --app app create-api-token --name otakuarr
+```
+
 The token is printed once and stored as a SHA-256 digest. Send it as
 `Authorization: Bearer oc_...`. Reissuing the same name rotates the token. Revoke
 it with `flask --app app revoke-api-token --name otakuarr`.

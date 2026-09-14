@@ -10,6 +10,8 @@ COPY docker/entrypoint.sh /entrypoint.sh
 COPY docker/build_config.py /app/docker/build_config.py
 RUN chmod +x /entrypoint.sh
 
+WORKDIR /app/src
+
 ENV DATA_DIR=/data
 
 EXPOSE 5001
