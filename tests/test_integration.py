@@ -48,6 +48,8 @@ class IntegrationApiTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_requires_token_and_lists_catalog(self):
+        self.assertEqual(app.config["SESSION_COOKIE_NAME"], "otaku_chan_session")
+        self.assertEqual(app.config["PERMANENT_SESSION_LIFETIME"].days, 90)
         self.assertEqual(self.client.get("/api/v1/status").status_code, 401)
         status = self.client.get("/api/v1/status", headers=self.headers)
         self.assertEqual(status.json, {"api_version": 1, "service": "otaku-chan"})

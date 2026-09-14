@@ -21,7 +21,9 @@ if not SECRET_PATH.exists():
     SECRET_PATH.write_text(secrets.token_hex(32))
 app.secret_key = SECRET_PATH.read_text().strip()
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=90)
+app.config["SESSION_COOKIE_NAME"] = "otaku_chan_session"
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(views_bp)
