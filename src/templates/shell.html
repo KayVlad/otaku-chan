@@ -93,7 +93,19 @@
       resetZoom() { this.zoom = 1; this.panX = 0; this.panY = 0; },
 
       scrollStrip(idx) {
-        this.$refs.strip?.querySelectorAll('.strip-thumb')?.[idx]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        const strip = this.$refs.strip;
+        const thumb = strip?.querySelectorAll('.strip-thumb')?.[idx];
+        if (!thumb || !strip.clientWidth || !strip.clientHeight) return;
+        const bounds = strip.getBoundingClientRect();
+        const item = thumb.getBoundingClientRect();
+        const left = bounds.left + strip.clientLeft;
+        const top = bounds.top + strip.clientTop;
+        const dx = item.left < left ? item.left - left
+          : Math.max(0, item.right - left - strip.clientWidth);
+        const dy = item.top < top ? item.top - top
+          : Math.max(0, item.bottom - top - strip.clientHeight);
+        // Scroll only the thumbnails; scrollIntoView can also move the shell.
+        if (dx || dy) strip.scrollBy({ left: dx, top: dy, behavior: 'smooth' });
       },
 
       async goTo(idx, dir = null) {
@@ -301,7 +313,8 @@
     document.body.classList.toggle('in-reader', !!main.dataset.reader);
     if (isSwap) main.scrollTop = 0;
     const cur = main.querySelector('.acc-current');
-    if (cur) cur.scrollIntoView({ block: 'center' });
+    if (cur) main.scrollTop += cur.getBoundingClientRect().top
+      - main.getBoundingClientRect().top - (main.clientHeight - cur.offsetHeight) / 2;
   }
   document.addEventListener('ajax:merged', (e) => { if (e.target.id === 'main') syncMain(e.target, true); });
   syncMain(document.getElementById('main'), false);

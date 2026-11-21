@@ -60,7 +60,7 @@
           </div>
         </div>
         <div class="viewer-bar">
-          <button class="btn" :class="{active: showStrip}" @click="showStrip = !showStrip" title="Toggle page strip">☰</button>
+          <button class="btn" :class="{active: showStrip}" @click="showStrip = !showStrip; if (showStrip) $nextTick(() => scrollStrip(currentIdx))" title="Toggle page strip">☰</button>
           <span class="tag zoom-pct"
                 x-text="Math.round(zoom*100)+'%'" @click="resetZoom()"
                 title="Click to reset zoom"></span>
