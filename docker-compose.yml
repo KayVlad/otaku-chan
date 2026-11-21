@@ -5,8 +5,11 @@ services:
       dockerfile: docker/Dockerfile
     env_file: .env
     ports:
-      - "6769:${PORT:-5001}"
+      - "6969:${PORT:-5001}"
     volumes:
-      - ./data:/data          
-      - ./manga_library:/mnt/manga:ro 
+      - ./data:/data
+      - /mnt/ssd1/hotData/MangaTst:/mnt/manga:rw
+      - /mnt/ssd1/hotData/MangaHidden:/mnt/hidden:rw
+      - /mnt/ssd1/hotData/MangaVlad:/mnt/vlad:rw
     restart: unless-stopped
+
